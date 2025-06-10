@@ -1,0 +1,6 @@
+PyQt5
+numpy
+pyqtgraph
+pyserial
+pyserial-asyncio
+logging
