@@ -348,7 +348,7 @@ class RealtimePlotWidget(QWidget):
                         self.update_plot()
             
             elif msg_type == "test_progress":
-                progress = message.get("progress", 0) * 100
+                progress = abs(message.get("progress", 0) * 100)
                 if progress >= 100:
                     self.set_test_completed()
                 else:
