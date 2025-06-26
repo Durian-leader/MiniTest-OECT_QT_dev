@@ -131,7 +131,7 @@ class DeviceControlWidget(QWidget):
         # Setup update timer for real-time data
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self.update_real_time_data)
-        self.update_timer.start(20)  # 20ms interval for more responsive updates
+        self.update_timer.start(100)  # 100ms interval for more responsive updates
         
         # Initial refresh
         self.refresh_devices()

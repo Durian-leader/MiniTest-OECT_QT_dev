@@ -52,7 +52,7 @@ class RealtimePlotWidget(QWidget):
         # 更新计时器
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_plot)
-        self.update_timer.start(50)  # 50ms更新
+        self.update_timer.start(100)  # 50ms更新
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -444,4 +444,4 @@ class RealtimePlotWidget(QWidget):
         
         self.update_status_label()
         self.step_info_label.setText("等待数据...")
-        self.update_timer.start(50)  # 更新周期
+        self.update_timer.start(100)  # 更新周期

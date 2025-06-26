@@ -967,73 +967,104 @@ class TestManager:
         }
 
 # 创建自定义的TestStep.data_callback方法
+
 def initialize_test_step_classes(data_bridge):
     """
-    初始化测试步骤类，注入自定义数据桥接器
-    
-    Args:
-        data_bridge: 数据桥接器实例
+    初始化测试步骤类，注入简化的数据缓冲机制
     """
     from backend_device_control_pyqt.test.step import TestStep
+    import time
+    from collections import defaultdict, deque
     
-    # 保存原始方法的引用
-    original_progress_callback = TestStep.progress_callback
-    original_data_callback = TestStep.data_callback
-    
-    # 重写回调方法，使用自定义数据桥接器
-    def patched_progress_callback(self, length: int, dev_id: str):
-        """重写的进度回调，使用进程间通信"""
-        # 基本进度数据
-        progress_data = {
-            "type": "test_progress",  # 使用标准化的消息类型名称
-            "step_type": self.get_step_type(),
-            "progress": min(length / self.calculate_total_bytes(), 1.0),
-            "step_id": self.step_id,
-            "test_id": self.step_id,  # 确保包含test_id
-            "device_id": dev_id
-        }
-        
-        # 如果有工作流进度信息，添加到进度数据中
-        workflow_info = None
-        if self.workflow_progress_info:
-            workflow_path = self.workflow_progress_info.get("workflow_path", [])
-            
-            # 工作流进度信息
-            workflow_info = {
-                "step_index": self.workflow_progress_info.get("step_index", 0),
-                "total_steps": self.workflow_progress_info.get("total_steps", 0),
-                "path": workflow_path,
-                "path_readable": self.format_workflow_path(workflow_path),
-                "iteration_info": self.workflow_progress_info.get("iteration_info")
-            }
-            
-            progress_data.update({
-                "is_workflow": True,
-                "workflow_info": workflow_info
+    # 简单的全局缓冲器
+    class SimpleDataBuffer:
+        def __init__(self):
+            self.buffers = defaultdict(lambda: {
+                'data': deque(),
+                'last_flush': time.time(),
+                'last_progress': time.time()
             })
         
-        try:
-            # 使用数据桥接器发送消息
-            asyncio.create_task(
-                data_bridge.send_progress(
-                    test_id=self.step_id,
-                    progress=progress_data["progress"],
-                    step_type=self.get_step_type(),
-                    device_id=dev_id,
-                    workflow_info=workflow_info
-                )
+        def add_data(self, test_id, hex_data, workflow_info):
+            buffer = self.buffers[test_id]
+            buffer['data'].append({
+                'hex_data': hex_data,
+                'workflow_info': workflow_info,
+                'timestamp': time.time()
+            })
+            
+            # 检查是否需要刷新（20个数据包或100ms超时）
+            should_flush = (
+                len(buffer['data']) >= 20 or
+                time.time() - buffer['last_flush'] >= 0.1
             )
-            logger.debug(f"进度数据已发送: test_id={self.step_id}, progress={progress_data['progress']*100:.1f}%")
-        except Exception as e:
-            logger.error(f"发送进度数据失败: {str(e)}")
+            
+            if should_flush:
+                self.flush_buffer(test_id)
+        
+        def flush_buffer(self, test_id):
+            buffer = self.buffers[test_id]
+            if not buffer['data']:
+                return
+                
+            # 合并数据
+            combined_hex = ""
+            latest_info = None
+            
+            while buffer['data']:
+                item = buffer['data'].popleft()
+                hex_data = item['hex_data']
+                
+                if isinstance(hex_data, str):
+                    combined_hex += hex_data.replace(" ", "")
+                elif isinstance(hex_data, (bytes, bytearray)):
+                    combined_hex += hex_data.hex().upper()
+                    
+                latest_info = item['workflow_info']
+            
+            # 发送合并数据
+            if combined_hex and latest_info:
+                try:
+                    asyncio.create_task(
+                        data_bridge.send_data(
+                            test_id=test_id,
+                            data=combined_hex,
+                            step_type=latest_info.get('step_type', 'transfer'),
+                            device_id=latest_info.get('device_id', ''),
+                            workflow_info=latest_info
+                        )
+                    )
+                except RuntimeError:
+                    # 如果没有事件循环，直接发送
+                    pass
+            
+            buffer['last_flush'] = time.time()
+        
+        def should_send_progress(self, test_id):
+            buffer = self.buffers[test_id]
+            current_time = time.time()
+            if current_time - buffer['last_progress'] >= 0.1:  # 100ms节流
+                buffer['last_progress'] = current_time
+                return True
+            return False
     
-    def patched_data_callback(self, hex_data, dev_id: str):
-        """重写的数据回调，使用进程间通信，仅发送实时数据，不发送保存请求"""
+    # 创建全局缓冲器
+    global_buffer = SimpleDataBuffer()
+    
+    # 重写进度回调
+    def buffered_progress_callback(self, length: int, dev_id: str):
+        test_id = self.step_id
+        
+        # 进度节流
+        if not global_buffer.should_send_progress(test_id):
+            return
+            
+        progress = min(length / self.calculate_total_bytes(), 1.0)
+        
         # 构造工作流信息
         workflow_info = None
         if self.workflow_progress_info:
             workflow_path = self.workflow_progress_info.get("workflow_path", [])
-            
             workflow_info = {
                 "step_index": self.workflow_progress_info.get("step_index", 0),
                 "total_steps": self.workflow_progress_info.get("total_steps", 0),
@@ -1043,25 +1074,49 @@ def initialize_test_step_classes(data_bridge):
             }
         
         try:
-            # 使用数据桥接器发送数据
             asyncio.create_task(
-                data_bridge.send_data(
-                    test_id=self.step_id,
-                    data=hex_data,
+                data_bridge.send_progress(
+                    test_id=test_id,
+                    progress=progress,
                     step_type=self.get_step_type(),
                     device_id=dev_id,
                     workflow_info=workflow_info
                 )
             )
-            logger.debug(f"数据已发送: test_id={self.step_id}, data_length={len(str(hex_data)) if isinstance(hex_data, str) else 'binary'}")
+        except RuntimeError:
+            # 如果没有事件循环，跳过
+            pass
         except Exception as e:
-            logger.error(f"发送数据失败: {str(e)}")
+            logger.error(f"发送进度失败: {e}")
+    
+    # 重写数据回调
+    def buffered_data_callback(self, hex_data, dev_id: str):
+        test_id = self.step_id
+        
+        # 构造工作流信息
+        workflow_info = {
+            'step_type': self.get_step_type(),
+            'device_id': dev_id
+        }
+        
+        if self.workflow_progress_info:
+            workflow_path = self.workflow_progress_info.get("workflow_path", [])
+            workflow_info.update({
+                "step_index": self.workflow_progress_info.get("step_index", 0),
+                "total_steps": self.workflow_progress_info.get("total_steps", 0),
+                "path": workflow_path,
+                "path_readable": self.format_workflow_path(workflow_path),
+                "iteration_info": self.workflow_progress_info.get("iteration_info")
+            })
+        
+        # 添加到缓冲区
+        global_buffer.add_data(test_id, hex_data, workflow_info)
     
     # 应用补丁
-    TestStep.progress_callback = patched_progress_callback
-    TestStep.data_callback = patched_data_callback
+    TestStep.progress_callback = buffered_progress_callback
+    TestStep.data_callback = buffered_data_callback
     
-    logger.info("测试步骤类已初始化并注入自定义数据桥接器")
+    logger.info("测试步骤类已应用简化缓冲机制（避免事件循环问题）")
 
 # 其他辅助函数保持不变
 async def list_available_serial_ports():

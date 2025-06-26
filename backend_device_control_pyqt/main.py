@@ -12,7 +12,8 @@ import uuid
 import signal
 import sys
 from typing import Dict, List, Any, Optional, Tuple
-
+if not os.path.exists("logs"):
+    os.makedirs("logs", exist_ok=True)
 # 设置日志
 logging.basicConfig(
     level=logging.INFO,
