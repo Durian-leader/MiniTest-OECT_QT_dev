@@ -1,5 +1,5 @@
 """
-医疗测试系统后端 - 多进程架构版本
+OECT测试系统后端 - 多进程架构版本
 使用四个专门的进程处理不同任务，优化高负载场景的性能
 """
 
@@ -44,7 +44,7 @@ SIGNAL_TERMINATE = "terminate"
 SIGNAL_ERROR = "error"
 
 class MedicalTestBackend:
-    """医疗测试系统后端主类，为PyQt应用提供接口"""
+    """OECT测试系统后端主类，为PyQt应用提供接口"""
     
     def __init__(self):
         """初始化后端"""
