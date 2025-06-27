@@ -965,50 +965,71 @@ class TestManager:
             "status": "fail",
             "reason": "test_not_found"
         }
-
-# 创建自定义的TestStep.data_callback方法
+# 修复步骤切换时的数据缓冲问题
 
 def initialize_test_step_classes(data_bridge):
     """
-    初始化测试步骤类，注入简化的数据缓冲机制
+    初始化测试步骤类，注入步骤感知的数据缓冲机制
     """
     from backend_device_control_pyqt.test.step import TestStep
     import time
     from collections import defaultdict, deque
     
-    # 简单的全局缓冲器
-    class SimpleDataBuffer:
+    # 步骤感知的数据缓冲器
+    class StepAwareDataBuffer:
         def __init__(self):
-            self.buffers = defaultdict(lambda: {
+            # 按test_id和step_type分别缓冲
+            self.buffers = defaultdict(lambda: defaultdict(lambda: {
                 'data': deque(),
                 'last_flush': time.time(),
-                'last_progress': time.time()
-            })
+                'last_progress': time.time(),
+                'step_info': None
+            }))
         
-        def add_data(self, test_id, hex_data, workflow_info):
-            buffer = self.buffers[test_id]
+        def add_data(self, test_id, step_type, hex_data, workflow_info):
+            """添加数据到对应步骤的缓冲区"""
+            buffer = self.buffers[test_id][step_type]
+            
+            # 检测步骤变化 - 如果step_index变了，立即刷新旧缓冲区
+            current_step_index = workflow_info.get('step_index', 0) if workflow_info else 0
+            if (buffer['step_info'] and 
+                buffer['step_info'].get('step_index', 0) != current_step_index):
+                
+                print(f"检测到步骤变化: {buffer['step_info'].get('step_index')} -> {current_step_index}")
+                self.flush_all_buffers_for_test(test_id)
+            
+            # 添加数据
             buffer['data'].append({
                 'hex_data': hex_data,
                 'workflow_info': workflow_info,
                 'timestamp': time.time()
             })
+            buffer['step_info'] = workflow_info
             
-            # 检查是否需要刷新（20个数据包或100ms超时）
+            # 检查是否需要刷新（15个数据包或80ms超时）
             should_flush = (
-                len(buffer['data']) >= 20 or
-                time.time() - buffer['last_flush'] >= 0.1
+                len(buffer['data']) >= 15 or
+                time.time() - buffer['last_flush'] >= 0.08
             )
             
             if should_flush:
-                self.flush_buffer(test_id)
+                self.flush_buffer(test_id, step_type)
         
-        def flush_buffer(self, test_id):
-            buffer = self.buffers[test_id]
+        def flush_all_buffers_for_test(self, test_id):
+            """刷新指定测试的所有缓冲区（步骤切换时调用）"""
+            if test_id in self.buffers:
+                for step_type in list(self.buffers[test_id].keys()):
+                    self.flush_buffer(test_id, step_type)
+        
+        def flush_buffer(self, test_id, step_type):
+            """刷新指定测试和步骤类型的缓冲区"""
+            buffer = self.buffers[test_id][step_type]
             if not buffer['data']:
                 return
                 
-            # 合并数据
+            # 合并同一步骤类型的数据
             combined_hex = ""
+            first_info = None
             latest_info = None
             
             while buffer['data']:
@@ -1019,40 +1040,49 @@ def initialize_test_step_classes(data_bridge):
                     combined_hex += hex_data.replace(" ", "")
                 elif isinstance(hex_data, (bytes, bytearray)):
                     combined_hex += hex_data.hex().upper()
-                    
+                
+                if first_info is None:
+                    first_info = item['workflow_info']
                 latest_info = item['workflow_info']
             
-            # 发送合并数据
-            if combined_hex and latest_info:
+            # 发送合并数据 - 使用第一个数据包的工作流信息确保步骤正确性
+            if combined_hex and first_info:
                 try:
                     asyncio.create_task(
                         data_bridge.send_data(
                             test_id=test_id,
                             data=combined_hex,
-                            step_type=latest_info.get('step_type', 'transfer'),
-                            device_id=latest_info.get('device_id', ''),
-                            workflow_info=latest_info
+                            step_type=step_type,  # 使用明确的步骤类型
+                            device_id=first_info.get('device_id', ''),
+                            workflow_info=first_info  # 使用第一个数据包的信息
                         )
                     )
+                    print(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_hex)}")
                 except RuntimeError:
                     # 如果没有事件循环，直接发送
                     pass
+                except Exception as e:
+                    print(f"发送缓冲数据失败: {e}")
             
             buffer['last_flush'] = time.time()
         
         def should_send_progress(self, test_id):
-            buffer = self.buffers[test_id]
-            current_time = time.time()
-            if current_time - buffer['last_progress'] >= 0.1:  # 100ms节流
-                buffer['last_progress'] = current_time
-                return True
-            return False
+            """检查是否应该发送进度（全局节流）"""
+            # 使用test_id的第一个缓冲区来记录进度时间
+            if test_id in self.buffers:
+                for step_type_buffers in self.buffers[test_id].values():
+                    current_time = time.time()
+                    if current_time - step_type_buffers['last_progress'] >= 0.1:  # 100ms节流
+                        step_type_buffers['last_progress'] = current_time
+                        return True
+                    return False
+            return True
     
     # 创建全局缓冲器
-    global_buffer = SimpleDataBuffer()
+    global_buffer = StepAwareDataBuffer()
     
     # 重写进度回调
-    def buffered_progress_callback(self, length: int, dev_id: str):
+    def step_aware_progress_callback(self, length: int, dev_id: str):
         test_id = self.step_id
         
         # 进度节流
@@ -1090,12 +1120,13 @@ def initialize_test_step_classes(data_bridge):
             logger.error(f"发送进度失败: {e}")
     
     # 重写数据回调
-    def buffered_data_callback(self, hex_data, dev_id: str):
+    def step_aware_data_callback(self, hex_data, dev_id: str):
         test_id = self.step_id
+        step_type = self.get_step_type()  # 获取当前步骤类型
         
         # 构造工作流信息
         workflow_info = {
-            'step_type': self.get_step_type(),
+            'step_type': step_type,
             'device_id': dev_id
         }
         
@@ -1109,14 +1140,46 @@ def initialize_test_step_classes(data_bridge):
                 "iteration_info": self.workflow_progress_info.get("iteration_info")
             })
         
-        # 添加到缓冲区
-        global_buffer.add_data(test_id, hex_data, workflow_info)
+        # 添加到对应步骤类型的缓冲区
+        global_buffer.add_data(test_id, step_type, hex_data, workflow_info)
     
     # 应用补丁
-    TestStep.progress_callback = buffered_progress_callback
-    TestStep.data_callback = buffered_data_callback
+    TestStep.progress_callback = step_aware_progress_callback
+    TestStep.data_callback = step_aware_data_callback
     
-    logger.info("测试步骤类已应用简化缓冲机制（避免事件循环问题）")
+    logger.info("测试步骤类已应用步骤感知的缓冲机制")
+
+
+# ============================================================================
+# 使用说明
+# ============================================================================
+
+"""
+修复要点：
+
+1. 按步骤类型分别缓冲数据
+   - transfer数据只与transfer数据合并
+   - transient数据只与transient数据合并
+
+2. 步骤变化检测
+   - 监控step_index变化
+   - 步骤切换时立即刷新所有缓冲区
+
+3. 工作流信息保护
+   - 使用第一个数据包的工作流信息
+   - 确保步骤类型正确传递
+
+4. 调试信息
+   - 添加了print语句帮助调试
+   - 可以看到何时检测到步骤变化
+
+修改步骤：
+1. 在 test_process.py 中替换 initialize_test_step_classes 函数
+2. 运行测试，观察控制台输出
+3. 应该能看到 "检测到步骤变化" 和 "发送缓冲数据" 的日志
+
+这样应该能解决步骤切换时的显示问题。
+"""
 
 # 其他辅助函数保持不变
 async def list_available_serial_ports():
