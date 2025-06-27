@@ -147,6 +147,70 @@ def gen_transient_cmd(params: Dict[str, Any]) -> List[int]:
     
     return ret
 
+def gen_output_cmd(params: Dict[str, Any]) -> List[int]:
+    """
+    生成符合 TLV 协议的 Output 命令数据帧
+    
+    Args:
+        params: 命令参数字典，包含以下字段:
+            - isSweep: 是否回扫
+            - timeStep: 时间步长(毫秒)
+            - sourceVoltage: 源极电压
+            - gateVoltage: 栅极电压(固定)
+            - drainVoltageStart: 漏极起始电压
+            - drainVoltageEnd: 漏极结束电压
+            - drainVoltageStep: 漏极步进电压
+            
+    Returns:
+        List[int]: 生成的二进制数据帧
+    """
+    # 检查必要参数
+    required_params = [
+        "isSweep", "timeStep", "sourceVoltage", "gateVoltage",
+        "drainVoltageStart", "drainVoltageEnd", "drainVoltageStep"
+    ]
+    
+    for param in required_params:
+        if param not in params:
+            logger.error(f"输出特性命令生成失败: 缺少必要参数 '{param}'")
+            raise ValueError(f"Missing required parameter: {param}")
+    
+    # 帧头(1) + Type(1) + Length(1) + Value(14) + 帧尾(1)
+    ret = [0] * 18
+    
+    ret[0] = 0xFF  # 帧头
+    ret[1] = 5   # Type (0x05)
+    ret[2] = 14    # Length（Output 指令固定 14 字节）
+    
+    # 按小端序填充数据
+    ret[3] = params["isSweep"] & 0x00FF
+    ret[4] = (params["isSweep"] & 0xFF00) >> 8
+    
+    ret[5] = params["timeStep"] & 0x00FF
+    ret[6] = (params["timeStep"] & 0xFF00) >> 8
+    
+    ret[7] = params["sourceVoltage"] & 0x00FF
+    ret[8] = (params["sourceVoltage"] & 0xFF00) >> 8
+    
+    ret[9] = params["gateVoltage"] & 0x00FF
+    ret[10] = (params["gateVoltage"] & 0xFF00) >> 8
+    
+    ret[11] = params["drainVoltageStart"] & 0x00FF
+    ret[12] = (params["drainVoltageStart"] & 0xFF00) >> 8
+    
+    ret[13] = params["drainVoltageEnd"] & 0x00FF
+    ret[14] = (params["drainVoltageEnd"] & 0xFF00) >> 8
+    
+    ret[15] = params["drainVoltageStep"] & 0x00FF
+    ret[16] = (params["drainVoltageStep"] & 0xFF00) >> 8
+    
+    ret[17] = 0xFE  # 帧尾
+    
+    # 在指令前添加 16 个字节的 0x00
+    ret = [0x00] * 16 + ret
+    
+    return ret
+
 def gen_who_are_you_cmd() -> List[int]:
     """
     生成用于询问设备身份的命令数据帧（Type=0x04）

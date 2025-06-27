@@ -28,6 +28,8 @@ from backend_device_control_pyqt.core.async_serial import AsyncSerialDevice
 from backend_device_control_pyqt.test.test import Test
 from backend_device_control_pyqt.test.transfer_step import TransferStep
 from backend_device_control_pyqt.test.transient_step import TransientStep
+from backend_device_control_pyqt.test.output_step import OutputStep
+
 
 # 消息类型常量
 MSG_START_TEST = "start_test"
@@ -340,6 +342,8 @@ class TestManager:
                 result = await self.start_transient_test(params)
             elif test_type == "workflow":
                 result = await self.start_workflow(params)
+            elif test_type == "output":
+                result = await self.start_output_test(params)
             else:
                 result = {"status": "fail", "reason": f"Unknown test type: {test_type}"}
             
@@ -596,7 +600,26 @@ class TestManager:
                     workflow_progress_info=workflow_progress_info
                 )
                 test.add_step(step)
+
+            elif step_type == "output":
+                # 创建额外的工作流进度信息
+                workflow_progress_info = {
+                    "workflow_path": step_path,
+                    "iteration_info": iteration_info,
+                    "step_index": i+1,
+                    "total_steps": len(steps)
+                }
                 
+                # 创建输出特性测试步骤
+                step = OutputStep(
+                    device=device,
+                    step_id=test_id,
+                    command_id=step_config["command_id"],
+                    params=step_config["params"],
+                    workflow_progress_info=workflow_progress_info
+                )
+                test.add_step(step)   
+
             elif step_type == "loop":
                 # 处理循环步骤
                 iterations = step_config["iterations"]
@@ -964,6 +987,75 @@ class TestManager:
         return {
             "status": "fail",
             "reason": "test_not_found"
+        }
+    async def start_output_test(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        启动输出特性测试
+        
+        Args:
+            params: 测试参数
+            
+        Returns:
+            测试启动结果
+        """
+        # 提取必要参数
+        device_id = params.get("device_id")
+        port = params.get("port")
+        baudrate = params.get("baudrate")
+        test_id = params.get("test_id")
+        
+        # 检查必要参数
+        if not all([device_id, port, baudrate, test_id]):
+            return {
+                "status": "fail", 
+                "reason": "Missing required parameters"
+            }
+        
+        # 获取设备
+        success, device = await self.get_or_create_device(device_id, port, baudrate)
+        if not success:
+            return {
+                "status": "fail", 
+                "reason": "Device connection failed"
+            }
+        
+        # 记录测试与设备的映射关系
+        self.test_to_device[test_id] = device_id
+        
+        # 创建测试对象
+        test = Test(
+            test_id=test_id, 
+            device_id=device_id, 
+            test_type="output",
+            port=port,
+            baudrate=baudrate,
+            name=params.get("name", "输出特性测试"),
+            description=params.get("description", ""),
+            metadata={"raw_params": params}
+        )
+        
+        # 初始化测试数据缓存
+        self.test_data_cache[test_id] = {}
+        
+        # 创建输出特性测试步骤
+        step = OutputStep(
+            device=device,
+            step_id=test_id,
+            command_id=params.get("command_id", 1),
+            params=params.get("step_params", params)
+        )
+        test.add_step(step)
+        
+        # 添加到活跃测试列表
+        self.active_tests[test_id] = test
+        
+        # 异步执行测试
+        asyncio.create_task(self.run_test(test))
+        
+        return {
+            "status": "ok", 
+            "msg": "output_test_started", 
+            "test_id": test_id
         }
 # 修复步骤切换时的数据缓冲问题
 

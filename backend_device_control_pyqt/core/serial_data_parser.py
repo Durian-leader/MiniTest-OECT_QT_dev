@@ -24,7 +24,13 @@ def bytes_to_numpy(byte_data, mode='transient'):
         numpy数组，每行包含两列 [timestamp/voltage, current]
     """
     # 移除可能的结束序列（如果存在）
-    for end_seq in [b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE', b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF']:
+    end_sequences = [
+        b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',  # Transient结束序列
+        b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF',  # Transfer结束序列  
+        b'\xCD\xAB\xEF\xCD\xAB\xEF\xCD\xAB'   # Output结束序列（小端字节序）
+    ]
+    
+    for end_seq in end_sequences:
         if byte_data.endswith(end_seq):
             byte_data = byte_data[:-len(end_seq)]
             break
@@ -32,7 +38,7 @@ def bytes_to_numpy(byte_data, mode='transient'):
     # 确定包大小和处理方式
     if mode == 'transient':
         packet_size = 7  # 4字节时间戳 + 3字节电流
-    else:  # transfer模式
+    else:  # transfer或output模式
         packet_size = 5  # 2字节电压 + 3字节电流
     
     # 修改：计算能被完整处理的字节数，丢弃不完整的尾部数据
@@ -71,7 +77,7 @@ def bytes_to_numpy(byte_data, mode='transient'):
             result[i, 0] = timestamp / 1000  # 时间戳单位为ms
             result[i, 1] = current_value - bias_current
             
-        else:  # transfer模式
+        else:  # transfer或output模式
             # 处理电压 (2字节，需要字节序调整)
             voltage_bytes = byte_data[offset:offset+2]
             # 反转字节序

@@ -317,11 +317,14 @@ class RealtimePlotWidget(QWidget):
                 else:
                     self.step_info_label.setText(f"当前: {mode}模式")
                 
-                # 更新坐标轴标签
+                # 更新坐标轴标签 - 添加output处理
                 if mode == 'transient':
                     self.plot_widget.setLabel('bottom', 'Time (s)')
                     self.plot_widget.setTitle("瞬态测试 - 电流 vs 时间")
-                else:
+                elif step_type == 'output':  # 新增
+                    self.plot_widget.setLabel('bottom', 'Drain Voltage (V)')
+                    self.plot_widget.setTitle("输出特性 - 电流 vs 漏压")
+                else:  # transfer
                     self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
                     self.plot_widget.setTitle("转移特性 - 电流 vs 栅压")
 

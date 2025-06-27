@@ -39,6 +39,7 @@ class StepParamsFormWidget(QWidget):
         type_names = {
             "transfer": "转移特性",
             "transient": "瞬态特性",
+            "output": "输出特性",  # 新增
             "loop": "循环"
         }
         return type_names.get(step_type, step_type)
@@ -52,6 +53,8 @@ class StepParamsFormWidget(QWidget):
             self.create_transfer_fields()
         elif step_type == "transient":
             self.create_transient_fields()
+        elif step_type == "output":  # 确保这一行存在
+            self.create_output_fields()
         elif step_type == "loop":
             self.create_loop_fields()
     
@@ -187,6 +190,63 @@ class StepParamsFormWidget(QWidget):
         self.cycles_spin.valueChanged.connect(self.on_transient_param_changed)
         self.params_layout.addRow("循环次数:", self.cycles_spin)
 
+    def create_output_fields(self):
+        """Create form fields for output step"""
+        params = self.step.get("params", {})
+        
+        # isSweep - checkbox
+        self.sweep_check = QCheckBox()
+        self.sweep_check.setChecked(params.get("isSweep", 1) == 1)
+        self.sweep_check.stateChanged.connect(self.on_sweep_changed)
+        self.params_layout.addRow("是否扫描:", self.sweep_check)
+        
+        # timeStep - 使用无滚轮版本的SpinBox
+        self.time_step_spin = NoWheelSpinBox()
+        self.time_step_spin.setRange(1, 10000)
+        self.time_step_spin.setValue(params.get("timeStep", 300))
+        self.time_step_spin.setSuffix(" ms")
+        self.time_step_spin.valueChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("时间步长:", self.time_step_spin)
+        
+        # sourceVoltage - 使用无滚轮版本的SpinBox
+        self.source_voltage_spin = NoWheelSpinBox()
+        self.source_voltage_spin.setRange(-2500, 2500)
+        self.source_voltage_spin.setValue(params.get("sourceVoltage", 0))
+        self.source_voltage_spin.setSuffix(" mV")
+        self.source_voltage_spin.valueChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("源电压:", self.source_voltage_spin)
+        
+        # gateVoltage - 使用无滚轮版本的SpinBox
+        self.gate_voltage_spin = NoWheelSpinBox()
+        self.gate_voltage_spin.setRange(-2500, 2500)
+        self.gate_voltage_spin.setValue(params.get("gateVoltage", 0))
+        self.gate_voltage_spin.setSuffix(" mV")
+        self.gate_voltage_spin.valueChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("栅电压:", self.gate_voltage_spin)
+        
+        # drainVoltageStart - 使用无滚轮版本的SpinBox
+        self.drain_start_spin = NoWheelSpinBox()
+        self.drain_start_spin.setRange(-2500, 2500)
+        self.drain_start_spin.setValue(params.get("drainVoltageStart", -100))
+        self.drain_start_spin.setSuffix(" mV")
+        self.drain_start_spin.valueChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("漏压起点:", self.drain_start_spin)
+        
+        # drainVoltageEnd - 使用无滚轮版本的SpinBox
+        self.drain_end_spin = NoWheelSpinBox()
+        self.drain_end_spin.setRange(-2500, 2500)
+        self.drain_end_spin.setValue(params.get("drainVoltageEnd", 400))
+        self.drain_end_spin.setSuffix(" mV")
+        self.drain_end_spin.valueChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("漏压终点:", self.drain_end_spin)
+        
+        # drainVoltageStep - 使用无滚轮版本的SpinBox
+        self.drain_step_spin = NoWheelSpinBox()
+        self.drain_step_spin.setRange(-1000, 1000)
+        self.drain_step_spin.setValue(params.get("drainVoltageStep", 10))
+        self.drain_step_spin.setSuffix(" mV")
+        self.drain_step_spin.valueChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("漏压步长:", self.drain_step_spin)
 
     def create_loop_fields(self):
         """Create form fields for loop step"""
@@ -246,6 +306,21 @@ class StepParamsFormWidget(QWidget):
         
         self.params_updated.emit()
     
+    def on_output_param_changed(self):
+        """Handle output parameter changes"""
+        if "params" not in self.step:
+            self.step["params"] = {}
+        
+        params = self.step["params"]
+        params["timeStep"] = self.time_step_spin.value()
+        params["sourceVoltage"] = self.source_voltage_spin.value()
+        params["gateVoltage"] = self.gate_voltage_spin.value()
+        params["drainVoltageStart"] = self.drain_start_spin.value()
+        params["drainVoltageEnd"] = self.drain_end_spin.value()
+        params["drainVoltageStep"] = self.drain_step_spin.value()
+        
+        self.params_updated.emit()
+
     def on_iterations_changed(self, value):
         """Handle iterations spinbox change"""
         self.step["iterations"] = value

@@ -174,8 +174,9 @@ class StepNodeWidget(QWidget):
         self.type_combo = CustomComboBox()
         self.type_combo.addItem("Transfer 特性", "transfer")
         self.type_combo.addItem("Transient 特性", "transient")
+        self.type_combo.addItem("Output 特性", "output")  # 新增
         self.type_combo.addItem("循环", "loop")
-        
+
         # Set current type
         current_type = self.step.get("type", "transfer")
         for i in range(self.type_combo.count()):
@@ -254,7 +255,7 @@ class StepNodeWidget(QWidget):
             # Refresh child steps
             self.refresh_child_steps()
         else:
-            # For transfer/transient, add command_id and params
+            # For transfer/transient/output, add command_id and params
             self.step["command_id"] = 1
             
             if new_type == "transfer":
@@ -267,7 +268,7 @@ class StepNodeWidget(QWidget):
                     "gateVoltageEnd": 400,
                     "gateVoltageStep": 10
                 }
-            else:  # transient
+            elif new_type == "transient":
                 self.step["params"] = {
                     "timeStep": 1,
                     "sourceVoltage": 0,
@@ -278,7 +279,16 @@ class StepNodeWidget(QWidget):
                     "gateVoltageTop": 400,
                     "cycles": 5
                 }
-            
+            elif new_type == "output":  # 新增
+                self.step["params"] = {
+                    "isSweep": 1,
+                    "timeStep": 300,
+                    "sourceVoltage": 0,
+                    "gateVoltage": 0,
+                    "drainVoltageStart": -100,
+                    "drainVoltageEnd": 400,
+                    "drainVoltageStep": 10
+                }
             # Remove iterations and steps if present
             if "iterations" in self.step:
                 del self.step["iterations"]

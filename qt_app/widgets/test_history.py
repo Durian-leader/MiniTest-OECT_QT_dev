@@ -671,7 +671,13 @@ class TestHistoryWidget(QWidget):
                 source = params.get("sourceVoltage", 0) / 1000.0
                 cycles = params.get("cycles", 0)
                 params_text = f"Vg: {gate_bottom} → {gate_top}V, Vd: {drain}V, Vs: {source}V, 循环: {cycles}"
-            
+            elif step_type == "output":  # 新增
+                gate = params.get("gateVoltage", 0) / 1000.0
+                drain_start = params.get("drainVoltageStart", 0) / 1000.0
+                drain_end = params.get("drainVoltageEnd", 0) / 1000.0
+                source = params.get("sourceVoltage", 0) / 1000.0
+                params_text = f"Vd: {drain_start} → {drain_end}V, Vg: {gate}V, Vs: {source}V"
+
             item.setText(2, params_text)
             
             # Add to tree widget
@@ -751,7 +757,23 @@ class TestHistoryWidget(QWidget):
             cycle_time = params.get('bottomTime', 0) + params.get('topTime', 0)
             total_time = cycle_time * params.get('cycles', 0)
             self.add_param_label("总测试时间", f"{total_time} ms ({total_time/1000:.1f} s)")
-    
+        elif step_type == "output":  # 新增
+            self.add_param_label("是否回扫", "是" if params.get("isSweep") == 1 else "否")
+            self.add_param_label("时间步长", f"{params.get('timeStep', 0)} ms")
+            
+            # Add voltages with consistent formatting and highlighting
+            self.add_voltage_param("源电压 (Vs)", params.get('sourceVoltage', 0))
+            self.add_voltage_param("栅电压 (Vg)", params.get('gateVoltage', 0))
+            self.add_voltage_param("漏压起点 (Vd start)", params.get('drainVoltageStart', 0))
+            self.add_voltage_param("漏压终点 (Vd end)", params.get('drainVoltageEnd', 0))
+            self.add_voltage_param("漏压步长 (Vd step)", params.get('drainVoltageStep', 0))
+            
+            # Add calculated values for convenience
+            drain_span = abs(params.get('drainVoltageEnd', 0) - params.get('drainVoltageStart', 0))
+            step_size = params.get('drainVoltageStep', 0)
+            if step_size > 0:
+                num_points = drain_span / step_size + 1
+                self.add_param_label("理论数据点数", f"{int(num_points)}")
     def add_param_label(self, name, value):
         """Add a parameter label to the form"""
         label = QLabel(str(value))
@@ -872,12 +894,16 @@ class TestHistoryWidget(QWidget):
             self.plot_widget.setLabel('left', 'Current (A)')
             # Set title
             self.plot_widget.setTitle('转移特性曲线')
+
+        elif step_type == "output":  # 新增
+            self.plot_widget.setLabel('bottom', 'Drain Voltage (V)')
+            self.plot_widget.setLabel('left', 'Current (A)')
+            self.plot_widget.setTitle('输出特性曲线')
         else:  # transient
             self.plot_widget.setLabel('bottom', 'Time (s)')
             self.plot_widget.setLabel('left', 'Current (A)')
             # Set title
             self.plot_widget.setTitle('瞬态响应曲线')
-        
         # Update plot line
         self.plot_line.setData(x, y)
         

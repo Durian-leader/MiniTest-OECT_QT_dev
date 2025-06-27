@@ -30,12 +30,27 @@ class TransientStepConfig(BaseModel):
         "cycles": 0
     }
 
+
+class OutputStepConfig(BaseModel):
+    """输出特性测试步骤配置"""
+    type: Literal["output"] = "output"
+    command_id: int
+    params: Dict[str, Any] = {
+        "isSweep": 0,
+        "timeStep": 0,
+        "sourceVoltage": 0,
+        "gateVoltage": 0,
+        "drainVoltageStart": 0,
+        "drainVoltageEnd": 0,
+        "drainVoltageStep": 0
+    }
+
 # 循环配置
 class LoopConfig(BaseModel):
     """循环配置"""
     type: Literal["loop"] = "loop"
     iterations: int = Field(..., gt=0, description="循环次数")
-    steps: List[Union["TransferStepConfig", "TransientStepConfig", "LoopConfig"]]
+    steps: List[Union["TransferStepConfig", "TransientStepConfig", "OutputStepConfig", "LoopConfig"]]
 
 # 工作流参数
 class WorkflowParams(BaseModel):
@@ -46,4 +61,4 @@ class WorkflowParams(BaseModel):
     baudrate: int
     name: str = "自定义工作流"
     description: str = ""
-    steps: List[Union[TransferStepConfig, TransientStepConfig, LoopConfig]]
+    steps: List[Union[TransferStepConfig, TransientStepConfig, OutputStepConfig, LoopConfig]]
