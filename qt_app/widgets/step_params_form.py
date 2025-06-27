@@ -216,13 +216,24 @@ class StepParamsFormWidget(QWidget):
         self.source_voltage_spin.valueChanged.connect(self.on_output_param_changed)
         self.params_layout.addRow("源电压:", self.source_voltage_spin)
         
-        # gateVoltage - 使用无滚轮版本的SpinBox
-        self.gate_voltage_spin = NoWheelSpinBox()
-        self.gate_voltage_spin.setRange(-2500, 2500)
-        self.gate_voltage_spin.setValue(params.get("gateVoltage", 0))
-        self.gate_voltage_spin.setSuffix(" mV")
-        self.gate_voltage_spin.valueChanged.connect(self.on_output_param_changed)
-        self.params_layout.addRow("栅电压:", self.gate_voltage_spin)
+        # gateVoltageList - 改为文本输入框，支持列表
+        from qt_app.widgets.custom_widgets import NoWheelLineEdit
+        self.gate_voltage_edit = NoWheelLineEdit()
+        # 设置默认值或从参数中获取
+        gate_voltages = params.get("gateVoltageList", [0, 200, 400])
+        if isinstance(gate_voltages, list):
+            gate_voltage_text = ",".join(map(str, gate_voltages))
+        else:
+            gate_voltage_text = str(gate_voltages)
+        self.gate_voltage_edit.setText(gate_voltage_text)
+        self.gate_voltage_edit.setPlaceholderText("输入栅压值，用逗号分隔，如: 0,200,400")
+        self.gate_voltage_edit.textChanged.connect(self.on_output_param_changed)
+        self.params_layout.addRow("栅压列表 (mV):", self.gate_voltage_edit)
+        
+        # 显示栅压扫描信息
+        self.gate_info_label = QLabel()
+        self.update_gate_voltage_info()
+        self.params_layout.addRow("扫描信息:", self.gate_info_label)
         
         # drainVoltageStart - 使用无滚轮版本的SpinBox
         self.drain_start_spin = NoWheelSpinBox()
@@ -247,6 +258,35 @@ class StepParamsFormWidget(QWidget):
         self.drain_step_spin.setSuffix(" mV")
         self.drain_step_spin.valueChanged.connect(self.on_output_param_changed)
         self.params_layout.addRow("漏压步长:", self.drain_step_spin)
+
+    def parse_gate_voltage_list(self, text):
+        """解析栅极电压列表"""
+        try:
+            # 移除空格并按逗号分割
+            values = [int(float(x.strip())) for x in text.split(',') if x.strip()]  # 先转float再转int
+            # 验证范围
+            for val in values:
+                if not -2500 <= val <= 2500:
+                    return None, f"栅压值 {val} 超出范围 (-2500 to 2500 mV)"
+            return values, None
+        except ValueError:
+            return None, "栅压列表格式错误，请使用逗号分隔的数字"
+
+    def update_gate_voltage_info(self):
+        """更新栅极电压信息显示"""
+        if hasattr(self, 'gate_voltage_edit'):
+            text = self.gate_voltage_edit.text()
+            values, error = self.parse_gate_voltage_list(text)
+            
+            if error:
+                self.gate_info_label.setText(f"❌ {error}")
+                self.gate_info_label.setStyleSheet("color: red;")
+            elif values:
+                self.gate_info_label.setText(f"✓ 将扫描 {len(values)} 条输出特性曲线")
+                self.gate_info_label.setStyleSheet("color: green;")
+            else:
+                self.gate_info_label.setText("⚠ 请输入有效的栅压值")
+                self.gate_info_label.setStyleSheet("color: orange;")
 
     def create_loop_fields(self):
         """Create form fields for loop step"""
@@ -305,7 +345,7 @@ class StepParamsFormWidget(QWidget):
         params["cycles"] = self.cycles_spin.value()
         
         self.params_updated.emit()
-    
+        
     def on_output_param_changed(self):
         """Handle output parameter changes"""
         if "params" not in self.step:
@@ -314,10 +354,21 @@ class StepParamsFormWidget(QWidget):
         params = self.step["params"]
         params["timeStep"] = self.time_step_spin.value()
         params["sourceVoltage"] = self.source_voltage_spin.value()
-        params["gateVoltage"] = self.gate_voltage_spin.value()
         params["drainVoltageStart"] = self.drain_start_spin.value()
         params["drainVoltageEnd"] = self.drain_end_spin.value()
         params["drainVoltageStep"] = self.drain_step_spin.value()
+        
+        # 处理栅极电压列表
+        if hasattr(self, 'gate_voltage_edit'):
+            gate_text = self.gate_voltage_edit.text()
+            gate_values, error = self.parse_gate_voltage_list(gate_text)
+            if gate_values:
+                params["gateVoltageList"] = gate_values
+            else:
+                params["gateVoltageList"] = [0]  # 默认值
+            
+            # 更新信息显示
+            self.update_gate_voltage_info()
         
         self.params_updated.emit()
 

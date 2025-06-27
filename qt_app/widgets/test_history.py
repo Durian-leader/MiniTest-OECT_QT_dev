@@ -671,12 +671,17 @@ class TestHistoryWidget(QWidget):
                 source = params.get("sourceVoltage", 0) / 1000.0
                 cycles = params.get("cycles", 0)
                 params_text = f"Vg: {gate_bottom} → {gate_top}V, Vd: {drain}V, Vs: {source}V, 循环: {cycles}"
-            elif step_type == "output":  # 新增
-                gate = params.get("gateVoltage", 0) / 1000.0
+            elif step_type == "output":  # 在refresh_step_list方法中
+                gate_voltages = params.get("gateVoltageList", [0])
+                if isinstance(gate_voltages, list):
+                    gate_text = f"{min(gate_voltages)}-{max(gate_voltages)}V ({len(gate_voltages)}条)"
+                else:
+                    gate_text = f"{gate_voltages/1000.0}V"
+                
                 drain_start = params.get("drainVoltageStart", 0) / 1000.0
                 drain_end = params.get("drainVoltageEnd", 0) / 1000.0
                 source = params.get("sourceVoltage", 0) / 1000.0
-                params_text = f"Vd: {drain_start} → {drain_end}V, Vg: {gate}V, Vs: {source}V"
+                params_text = f"Vd: {drain_start} → {drain_end}V, Vg: {gate_text}, Vs: {source}V"
 
             item.setText(2, params_text)
             

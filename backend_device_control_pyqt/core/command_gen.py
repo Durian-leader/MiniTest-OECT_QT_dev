@@ -182,27 +182,36 @@ def gen_output_cmd(params: Dict[str, Any]) -> List[int]:
     ret[1] = 5   # Type (0x05)
     ret[2] = 14    # Length（Output 指令固定 14 字节）
     
+    # 确保所有参数都是整数，避免位运算错误
+    is_sweep = int(params["isSweep"])
+    time_step = int(params["timeStep"])
+    source_voltage = int(params["sourceVoltage"])
+    gate_voltage = int(params["gateVoltage"])  # 确保是整数
+    drain_voltage_start = int(params["drainVoltageStart"])
+    drain_voltage_end = int(params["drainVoltageEnd"])
+    drain_voltage_step = int(params["drainVoltageStep"])
+    
     # 按小端序填充数据
-    ret[3] = params["isSweep"] & 0x00FF
-    ret[4] = (params["isSweep"] & 0xFF00) >> 8
+    ret[3] = is_sweep & 0x00FF
+    ret[4] = (is_sweep & 0xFF00) >> 8
     
-    ret[5] = params["timeStep"] & 0x00FF
-    ret[6] = (params["timeStep"] & 0xFF00) >> 8
+    ret[5] = time_step & 0x00FF
+    ret[6] = (time_step & 0xFF00) >> 8
     
-    ret[7] = params["sourceVoltage"] & 0x00FF
-    ret[8] = (params["sourceVoltage"] & 0xFF00) >> 8
+    ret[7] = source_voltage & 0x00FF
+    ret[8] = (source_voltage & 0xFF00) >> 8
     
-    ret[9] = params["gateVoltage"] & 0x00FF
-    ret[10] = (params["gateVoltage"] & 0xFF00) >> 8
+    ret[9] = gate_voltage & 0x00FF
+    ret[10] = (gate_voltage & 0xFF00) >> 8
     
-    ret[11] = params["drainVoltageStart"] & 0x00FF
-    ret[12] = (params["drainVoltageStart"] & 0xFF00) >> 8
+    ret[11] = drain_voltage_start & 0x00FF
+    ret[12] = (drain_voltage_start & 0xFF00) >> 8
     
-    ret[13] = params["drainVoltageEnd"] & 0x00FF
-    ret[14] = (params["drainVoltageEnd"] & 0xFF00) >> 8
+    ret[13] = drain_voltage_end & 0x00FF
+    ret[14] = (drain_voltage_end & 0xFF00) >> 8
     
-    ret[15] = params["drainVoltageStep"] & 0x00FF
-    ret[16] = (params["drainVoltageStep"] & 0xFF00) >> 8
+    ret[15] = drain_voltage_step & 0x00FF
+    ret[16] = (drain_voltage_step & 0xFF00) >> 8
     
     ret[17] = 0xFE  # 帧尾
     

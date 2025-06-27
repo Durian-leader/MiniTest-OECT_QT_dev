@@ -18,7 +18,7 @@ def bytes_to_numpy(byte_data, mode='transient'):
     
     Args:
         byte_data: 字节数组
-        mode: 数据模式，'transient' (7字节一组) 或 'transfer' (5字节一组)
+        mode: 数据模式，'transient' (7字节一组), 'transfer' (5字节一组), 或 'output' (5字节一组)
     
     Returns:
         numpy数组，每行包含两列 [timestamp/voltage, current]
@@ -38,7 +38,7 @@ def bytes_to_numpy(byte_data, mode='transient'):
     # 确定包大小和处理方式
     if mode == 'transient':
         packet_size = 7  # 4字节时间戳 + 3字节电流
-    else:  # transfer或output模式
+    else:  # transfer或output模式都使用相同的解析方式
         packet_size = 5  # 2字节电压 + 3字节电流
     
     # 修改：计算能被完整处理的字节数，丢弃不完整的尾部数据

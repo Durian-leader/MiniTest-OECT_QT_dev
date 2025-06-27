@@ -279,12 +279,12 @@ class StepNodeWidget(QWidget):
                     "gateVoltageTop": 400,
                     "cycles": 5
                 }
-            elif new_type == "output":  # 新增
+            elif new_type == "output":  # 修改output的默认参数
                 self.step["params"] = {
                     "isSweep": 1,
                     "timeStep": 300,
                     "sourceVoltage": 0,
-                    "gateVoltage": 0,
+                    "gateVoltageList": [0, 200, 400],  # 改为列表
                     "drainVoltageStart": -100,
                     "drainVoltageEnd": 400,
                     "drainVoltageStep": 10
