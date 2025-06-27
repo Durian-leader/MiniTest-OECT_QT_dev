@@ -133,9 +133,85 @@ class DeviceControlWidget(QWidget):
         self.update_timer.timeout.connect(self.update_real_time_data)
         self.update_timer.start(100)  # 100ms interval for more responsive updates
         
+        # *** 新增：设备状态更新定时器 ***
+        self.device_status_timer = QTimer(self)
+        self.device_status_timer.timeout.connect(self.update_device_status)
+        self.device_status_timer.start(500)  # 500ms间隔，每半秒更新一次
+        
+        # 缓存设备信息，避免重复扫描硬件
+        self.cached_devices = []
+        self.last_device_scan = 0
+        self.device_scan_interval = None  # 10秒重新扫描一次硬件
+
         # Initial refresh
         self.refresh_devices()
+
+        # 是否显示测试完成通知（可以通过设置控制）
+        self.show_completion_notification = False  # 设置为True可启用通知
     
+    def update_device_status(self):
+        """
+        实时更新设备状态显示（不重新扫描硬件）
+        """
+        try:
+            # 检查是否需要重新扫描硬件设备
+            current_time = time.time()
+            if self.device_scan_interval == None:
+                pass
+            else:
+                if current_time - self.last_device_scan > self.device_scan_interval:
+                    # 10秒扫描一次硬件，检查是否有新设备
+                    self.refresh_devices()
+                    return
+            
+            # 仅更新现有设备的状态显示
+            for i in range(self.device_list.count()):
+                item = self.device_list.item(i)
+                if not item:
+                    continue
+                    
+                port = item.data(Qt.UserRole)
+                device_data = item.data(Qt.UserRole + 1)
+                
+                if not port or not device_data:
+                    continue
+                
+                # 检查该设备是否有活跃测试
+                has_active_test = port in self.current_test_ids
+                current_test_id = self.current_test_ids.get(port, None)
+                
+                # 获取当前项的活跃测试状态
+                item_active_test = item.data(Qt.UserRole + 2)
+                
+                # 如果状态发生变化，更新显示
+                if (has_active_test and not item_active_test) or \
+                (not has_active_test and item_active_test) or \
+                (has_active_test and item_active_test != current_test_id):
+                    
+                    # 更新背景色和测试状态
+                    if has_active_test:
+                        item.setBackground(QBrush(QColor("#e6f7ff")))
+                        item.setData(Qt.UserRole + 2, current_test_id)
+                        logger.info(f"设备 {port} 开始测试: {current_test_id}")
+                    else:
+                        item.setBackground(QBrush())  # 清除背景色
+                        item.setData(Qt.UserRole + 2, None)
+                        logger.info(f"设备 {port} 测试结束")
+                    
+                    # 强制重绘该项
+                    self.device_list.update(self.device_list.indexFromItem(item))
+            # 可选：每10秒打印一次状态（调试用）
+            if logger.isEnabledFor(logging.DEBUG):
+                if hasattr(self, '_last_status_print'):
+                    if time.time() - self._last_status_print > 10:
+                        self.monitor_test_status()
+                        self._last_status_print = time.time()
+                else:
+                    self._last_status_print = time.time()
+        except Exception as e:
+            # 静默处理错误，避免影响UI
+            pass
+
     def setup_ui(self):
         """Setup the user interface"""
         # Main layout
@@ -312,7 +388,12 @@ class DeviceControlWidget(QWidget):
         self.save_current_workflow()
         
         try:
+            # 获取设备列表
             devices = self.backend.list_serial_ports()
+            
+            # 更新缓存
+            self.cached_devices = devices
+            self.last_device_scan = time.time()
             
             # Save current selection and device information
             current_port = None
@@ -321,10 +402,12 @@ class DeviceControlWidget(QWidget):
             # 先保存当前设备列表的信息
             for i in range(self.device_list.count()):
                 item = self.device_list.item(i)
-                device_data = item.data(Qt.UserRole + 1)
-                port = device_data['device']
-                current_devices[port] = device_data
-                
+                if item:
+                    device_data = item.data(Qt.UserRole + 1)
+                    if device_data:
+                        port = device_data['device']
+                        current_devices[port] = device_data
+            
             if self.device_list.currentItem():
                 current_port = self.device_list.currentItem().data(Qt.UserRole)
             
@@ -369,10 +452,15 @@ class DeviceControlWidget(QWidget):
                         break
             elif self.device_list.count() > 0:
                 self.device_list.setCurrentRow(0)
+                
+            logger.info(f"设备列表已刷新: {len(devices)} 个设备")
         
         except Exception as e:
             QMessageBox.warning(self, "Error", f"获取设备列表失败: {str(e)}")
-    
+    def force_refresh_devices(self):
+        """强制重新扫描设备硬件（原刷新按钮的行为）"""
+        self.last_device_scan = 0  # 强制重新扫描
+        self.refresh_devices()
     def on_device_selected(self, current, previous):
         """Handle device selection"""
         # 保存上一个设备的工作流配置
@@ -602,7 +690,7 @@ class DeviceControlWidget(QWidget):
                 del self.current_test_ids[self.selected_port]
                 
                 # Update device list
-                self.refresh_devices()
+                # self.force_refresh_devices()
                 
                 # Update device info
                 device_info = None
@@ -684,8 +772,9 @@ class DeviceControlWidget(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"导入工作流时发生错误: {str(e)}")
     
+    
     def update_real_time_data(self):
-        """Update real-time data for active plots - 批量处理版本"""
+        """Update real-time data for active plots - 批量处理版本 + 测试完成检测"""
         # 批量处理队列中的所有消息
         processed = 0
         max_process = 500  # 一次循环中最多处理500条消息，避免无限循环
@@ -696,9 +785,13 @@ class DeviceControlWidget(QWidget):
             if not data:
                 break  # 队列为空，退出循环
             
+            # *** 新增：检查测试完成消息 ***
+            self.handle_backend_message(data)
+            
             # 处理数据
             test_id = data.get('test_id')
             if not test_id:
+                processed += 1
                 continue
                 
             # 找到对应的设备
@@ -739,3 +832,150 @@ class DeviceControlWidget(QWidget):
             if self.selected_port in self.workflows:
                 self.workflow_editor.set_steps(self.workflows[self.selected_port])
                 logger.info(f"恢复设备 {self.selected_port} 的工作流配置，共 {len(self.workflows[self.selected_port])} 个步骤")
+
+
+    def handle_backend_message(self, message):
+        """
+        处理来自后端的各种消息，包括测试完成通知
+        
+        Args:
+            message: 从后端接收到的消息
+        """
+        msg_type = message.get("type")
+        test_id = message.get("test_id")
+        
+        try:
+            if msg_type == "test_result":
+                # 测试结果消息 - 表示测试已完成
+                self.handle_test_completion(test_id, message)
+                
+            elif msg_type == "test_complete":
+                # 测试完成消息
+                self.handle_test_completion(test_id, message)
+                
+            elif msg_type == "test_error":
+                # 测试错误消息 - 也表示测试结束
+                self.handle_test_error(test_id, message)
+                
+            # elif msg_type == "test_progress":
+            #     # 检查进度是否为100%
+            #     progress = message.get("progress", 0)
+            #     if progress >= 1.0:  # 100%完成
+            #         # 注意：不要在这里立即标记完成，因为可能还有后续数据
+            #         # 设置一个延迟检查
+            #         self.schedule_completion_check(test_id)
+                    
+        except Exception as e:
+            logger.error(f"处理后端消息时出错: {e}")
+
+
+    def handle_test_completion(self, test_id, message):
+        """
+        处理测试完成
+        
+        Args:
+            test_id: 完成的测试ID
+            message: 完成消息
+        """
+        if not test_id:
+            return
+            
+        # 查找对应的设备端口
+        device_port = None
+        for port, tid in list(self.current_test_ids.items()):
+            if tid == test_id:
+                device_port = port
+                break
+        
+        if device_port:
+            logger.info(f"检测到测试完成: {test_id} (设备: {device_port})")
+            
+            # 更新图表状态
+            if device_port in self.plot_widgets:
+                self.plot_widgets[device_port].set_test_completed()
+            
+            # *** 关键：从活跃测试列表中移除 ***
+            del self.current_test_ids[device_port]
+            
+            # 更新设备信息显示
+            if device_port == self.selected_port:
+                self.update_selected_device_info()
+            
+            # 可选：显示完成通知
+            if hasattr(self, 'show_completion_notification') and self.show_completion_notification:
+                QMessageBox.information(self, "测试完成", f"测试 {test_id} 已自动完成")
+        else:
+            logger.warning(f"警告：收到未知测试的完成消息: {test_id}")
+
+
+    def handle_test_error(self, test_id, message):
+        """
+        处理测试错误
+        
+        Args:
+            test_id: 出错的测试ID
+            message: 错误消息
+        """
+        if not test_id:
+            return
+            
+        # 查找对应的设备端口
+        device_port = None
+        for port, tid in list(self.current_test_ids.items()):
+            if tid == test_id:
+                device_port = port
+                break
+        
+        if device_port:
+            error_msg = message.get("error", "未知错误")
+            logger.error(f"检测到测试错误: {test_id} (设备: {device_port}) - {error_msg}")
+            
+            # 更新图表状态
+            if device_port in self.plot_widgets:
+                self.plot_widgets[device_port].set_test_completed()
+            
+            # *** 关键：从活跃测试列表中移除 ***
+            del self.current_test_ids[device_port]
+            
+            # 更新设备信息显示
+            if device_port == self.selected_port:
+                self.update_selected_device_info()
+            
+            # 显示错误通知
+            QMessageBox.warning(self, "测试错误", f"测试 {test_id} 发生错误: {error_msg}")
+
+    def update_selected_device_info(self):
+        """更新当前选中设备的信息显示"""
+        if not self.selected_port:
+            return
+            
+        # 获取设备信息
+        device_info = None
+        for i in range(self.device_list.count()):
+            item = self.device_list.item(i)
+            if item and item.data(Qt.UserRole) == self.selected_port:
+                device_info = item.data(Qt.UserRole + 1)
+                break
+        
+        if device_info:
+            info_text = f"当前设备: {device_info['description']}"
+            if device_info['device_id']:
+                info_text += f"<br><small>设备 ID: {device_info['device_id']}</small>"
+            
+            # 检查是否还有活跃测试
+            if self.selected_port in self.current_test_ids:
+                test_id = self.current_test_ids[self.selected_port]
+                info_text += f"<br><small>测试 ID: {test_id}</small>"
+            
+            self.device_info.setText(info_text)
+
+    def monitor_test_status(self):
+        """
+        监控并打印当前测试状态（用于调试）
+        """
+        if self.current_test_ids:
+            logger.debug("=== 当前活跃测试 ===")
+            for port, test_id in self.current_test_ids.items():
+                logger.debug(f"设备 {port}: {test_id}")
+        else:
+            logger.debug("当前没有活跃测试")

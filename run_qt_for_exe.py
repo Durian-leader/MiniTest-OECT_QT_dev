@@ -4,6 +4,7 @@ import sys
 import logging
 import multiprocessing as mp
 
+logging.basicConfig(level=logging.ERROR)      # 全局日志控制
 
 def _setup_qt_plugin_path() -> None:
     """确保打包后 Qt 找得到 platform plugins。"""
@@ -23,7 +24,6 @@ def _bootstrap():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.ERROR)      # 全局日志控制
     mp.freeze_support()                           # ⭐ 关键：给 PyInstaller 子进程“解锁”
     _bootstrap()
 
