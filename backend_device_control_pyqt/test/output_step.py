@@ -36,6 +36,9 @@ class OutputStep(TestStep):
         # 存储所有扫描的数据
         self.all_scan_data = {}  # {vg_value: data_array}
         
+        # *** 新增：当前栅极电压跟踪 ***
+        self.current_gate_voltage = None
+        
     def get_step_type(self) -> str:
         return "output"
         
@@ -73,6 +76,37 @@ class OutputStep(TestStep):
         
         cmd_list = gen_output_cmd(temp_params)
         return bytes_to_hex(cmd_list)
+    
+    def create_enhanced_data_callback(self, gate_voltage: int):
+        """
+        *** 创建增强的数据回调函数，添加output元数据到hex数据 ***
+        """
+        def enhanced_data_callback(hex_data, dev_id: str):
+            try:
+                # *** 关键思路：将元数据编码到hex数据的特殊前缀中 ***
+                # 创建一个特殊的标记，让前端能识别这是output数据
+                output_metadata = {
+                    "gate_voltage": gate_voltage,
+                    "gate_voltage_index": self.gate_voltages.index(gate_voltage),
+                    "total_gate_voltages": len(self.gate_voltages),
+                    "is_output_curve": True
+                }
+                
+                # 将元数据编码为特殊标记字符串
+                # 格式: OUTPUT_META:{gate_voltage}:{index}:{total}|{hex_data}
+                meta_prefix = f"OUTPUT_META:{gate_voltage}:{self.gate_voltages.index(gate_voltage)}:{len(self.gate_voltages)}|"
+                enhanced_hex_data = meta_prefix + hex_data
+                
+                # 使用原有的data_callback传递增强后的数据
+                self.data_callback(enhanced_hex_data, dev_id)
+                
+                logger.debug(f"发送增强output数据: test_id={self.step_id}, gate_voltage={gate_voltage}mV")
+            except Exception as e:
+                logger.error(f"发送output数据失败: {str(e)}")
+                # 降级：如果失败就发送原始数据
+                self.data_callback(hex_data, dev_id)
+        
+        return enhanced_data_callback
         
     async def execute(self):
         """Execute the output test step for all gate voltages"""
@@ -84,11 +118,17 @@ class OutputStep(TestStep):
         for i, gate_voltage in enumerate(self.gate_voltages):
             logger.info(f"扫描栅极电压 {gate_voltage} mV ({i+1}/{len(self.gate_voltages)})")
             
+            # *** 关键修改：设置当前栅极电压 ***
+            self.current_gate_voltage = gate_voltage
+            
             # 更新进度
             base_progress = i / len(self.gate_voltages)
             
             # 生成命令
             cmd_str = self.generate_command(gate_voltage)
+            
+            # *** 创建增强的数据回调函数 ***
+            enhanced_data_callback = self.create_enhanced_data_callback(gate_voltage)
             
             # 执行单次扫描
             def progress_callback_wrapper(length: int, dev_id: str):
@@ -98,17 +138,14 @@ class OutputStep(TestStep):
                 total_progress = base_progress + (scan_progress / len(self.gate_voltages))
                 self.progress_callback(int(total_progress * self.calculate_total_bytes()), dev_id)
             
-            def data_callback_wrapper(hex_data, dev_id: str):
-                # 为数据添加栅极电压标识
-                self.data_callback(hex_data, dev_id)
-            
+            # *** 使用增强的数据回调函数 ***
             data_result, reason = await self.device.send_and_receive_command(
                 command=cmd_str,
                 end_sequences={self.get_step_type(): self.get_end_sequence()},
                 timeout=None,
                 packet_size=self.get_packet_size(),
                 progress_callback=progress_callback_wrapper,
-                data_callback=data_callback_wrapper
+                data_callback=enhanced_data_callback  # 使用增强回调
             )
             
             # 存储这次扫描的数据，并清理结束序列

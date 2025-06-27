@@ -98,6 +98,7 @@ class TestStep(ABC):
             else:
                 step_type = "转移特性" if node.get("type") == "transfer" else \
                             "瞬态特性" if node.get("type") == "transient" else \
+                            "输出特性" if node.get("type") == "output" else \
                             "步骤"
                 parts.append(f"{step_type}[{node['index']}/{node['total']}]")
                 
@@ -153,9 +154,9 @@ class TestStep(ABC):
         except Exception as e:
             logger.error(f"发送进度数据失败: {str(e)}")
         
-    def data_callback(self, hex_data, dev_id: str):
+    def data_callback(self, hex_data, dev_id: str, **kwargs):
         """
-        Default data callback implementation
+        Default data callback implementation - *** 新增kwargs支持 ***
         This is a regular function that creates a task for the async operation
         """
         # 构造工作流信息
@@ -171,6 +172,9 @@ class TestStep(ABC):
                 "iteration_info": self.workflow_progress_info.get("iteration_info")
             }
         
+        # *** 新增：从kwargs中提取output_metadata ***
+        output_metadata = kwargs.get('output_metadata', None)
+        
         try:
             # 使用数据桥接器发送数据
             # 创建异步任务来发送
@@ -180,7 +184,8 @@ class TestStep(ABC):
                     data=hex_data,
                     step_type=self.get_step_type(),
                     device_id=dev_id,
-                    workflow_info=workflow_info
+                    workflow_info=workflow_info,
+                    output_metadata=output_metadata  # *** 新增：传递output元数据 ***
                 )
             )
             logger.debug(f"数据已发送: test_id={self.step_id}, data_length={len(str(hex_data)) if isinstance(hex_data, str) else 'binary'}")

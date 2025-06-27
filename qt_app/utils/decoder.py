@@ -37,8 +37,12 @@ def remove_end_sequences(hex_string):
     Returns:
         str: Cleaned hex string
     """
-    # Define end sequence markers
-    end_sequences = ['FFFFFFFFFFFFFFFF', 'FEFEFEFEFEFEFEFE']
+    # Define end sequence markers - *** 新增output结束序列 ***
+    end_sequences = [
+        'FFFFFFFFFFFFFFFF',  # Transfer结束序列
+        'FEFEFEFEFEFEFEFE',  # Transient结束序列
+        'CDABEFCDABEFCDAB'   # Output结束序列（小端字节序）
+    ]
     
     # Remove markers if found
     cleaned_hex = hex_string
@@ -46,6 +50,7 @@ def remove_end_sequences(hex_string):
         if cleaned_hex.endswith(seq):
             logger.debug(f"检测到结束标识符: {seq}")
             cleaned_hex = cleaned_hex[:-len(seq)]
+            break  # 只移除一次
     
     return cleaned_hex
 
@@ -86,7 +91,7 @@ def decode_hex_to_bytes(hex_string):
 
 def decode_bytes_to_data(byte_data, mode='transfer'):
     """
-    Decode bytes to data points
+    Decode bytes to data points - *** 改进output支持 ***
     
     Args:
         byte_data: Raw byte data
@@ -113,14 +118,17 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
         # Print some debug info
         logger.debug(f"解码: 模式={mode}, 数据长度={len(byte_data)}字节, 包大小={packet_size}字节")
         
-        # 检查是否包含结束序列，如果有则记录但继续处理
-        if contains_end_sequence(byte_data):
-            logger.debug("检测到字节数据中包含结束序列，将在处理中跳过")
+        # *** 改进：检查是否包含output结束序列 ***
+        if contains_output_end_sequence(byte_data):
+            logger.debug("检测到output结束序列，将在处理中跳过")
+        elif contains_end_sequence(byte_data):
+            logger.debug("检测到其他结束序列，将在处理中跳过")
         
         # Process each packet
+        packets_processed = 0
         for i in range(0, len(byte_data) - packet_size + 1, packet_size):
-            # Skip possible end sequence markers
-            if is_end_sequence(byte_data, i, packet_size):
+            # *** 改进：跳过各种类型的结束序列 ***
+            if is_any_end_sequence(byte_data, i, packet_size):
                 logger.debug(f"跳过结束序列在位置 {i}")
                 continue
             
@@ -139,9 +147,15 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
                     
                 else:  # transfer or output
                     # Process transfer/output data
-                    # Gate voltage (2 bytes, little endian, signed)
+                    # Voltage (2 bytes, little endian, signed)
                     voltage_raw = int.from_bytes(byte_data[i:i+2], byteorder='little', signed=True)
-                    voltage = voltage_raw / 1000.0  # Convert to volts
+                    
+                    if mode == 'output':
+                        # For output, this is drain voltage
+                        voltage = voltage_raw / 1000.0  # Convert to volts
+                    else:
+                        # For transfer, this is gate voltage
+                        voltage = voltage_raw / 1000.0  # Convert to volts
                     
                     # Current (3 bytes)
                     current_raw = int.from_bytes(b'\x00' + byte_data[i+2:i+5], byteorder='big')
@@ -150,9 +164,11 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
                     # Add data point
                     result.append([voltage, current_value])
                     
+                    packets_processed += 1
+                    
                     # Print the first few data points for debugging
-                    if len(result) <= 3:
-                        logger.debug(f"数据点 {len(result)}: Voltage={voltage}V, Current={current_value}A")
+                    if packets_processed <= 3:
+                        logger.debug(f"数据点 {packets_processed}: Voltage={voltage}V, Current={current_value}A")
                         
             except Exception as e:
                 logger.warning(f"解析数据包 {i//packet_size} 时出错: {e}")
@@ -181,8 +197,9 @@ def contains_end_sequence(byte_data):
     
     # Check for common end sequence patterns
     end_patterns = [
-        b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF',  # 8 bytes of 0xFF
-        b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',  # 8 bytes of 0xFE
+        b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF',  # 8 bytes of 0xFF (transfer)
+        b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',  # 8 bytes of 0xFE (transient)
+        b'\xCD\xAB\xEF\xCD\xAB\xEF\xCD\xAB',  # Output结束序列（小端字节序）
     ]
     
     for pattern in end_patterns:
@@ -191,9 +208,27 @@ def contains_end_sequence(byte_data):
     
     return False
 
+def contains_output_end_sequence(byte_data):
+    """
+    *** 新增：专门检查output结束序列 ***
+    
+    Args:
+        byte_data: Raw byte data
+        
+    Returns:
+        bool: True if output end sequence is found
+    """
+    if len(byte_data) < 8:
+        return False
+    
+    # Output特有的结束序列
+    output_end_pattern = b'\xCD\xAB\xEF\xCD\xAB\xEF\xCD\xAB'
+    
+    return output_end_pattern in byte_data
+
 def is_end_sequence(byte_data, index, packet_size):
     """
-    Check if bytes at index represent an end sequence
+    Check if bytes at index represent an end sequence (transfer/transient)
     
     Args:
         byte_data: Raw byte data
@@ -217,6 +252,47 @@ def is_end_sequence(byte_data, index, packet_size):
     
     # It's an end sequence if all bytes match and are either 0xFF or 0xFE
     return first_byte in (0xFF, 0xFE)
+
+def is_output_end_sequence(byte_data, index, packet_size):
+    """
+    *** 新增：检查output结束序列 ***
+    
+    Args:
+        byte_data: Raw byte data
+        index: Current index
+        packet_size: Packet size
+        
+    Returns:
+        bool: True if this is an output end sequence
+    """
+    # Output结束序列：CDABEFCDABEFCDAB (8字节)
+    output_end = b'\xCD\xAB\xEF\xCD\xAB\xEF\xCD\xAB'
+    
+    # 检查是否有足够的字节来匹配结束序列
+    if index + len(output_end) > len(byte_data):
+        return False
+    
+    # 检查是否匹配output结束序列
+    return byte_data[index:index + len(output_end)] == output_end
+
+def is_any_end_sequence(byte_data, index, packet_size):
+    """
+    *** 新增：检查任何类型的结束序列 ***
+    
+    Args:
+        byte_data: Raw byte data
+        index: Current index
+        packet_size: Packet size
+        
+    Returns:
+        bool: True if this is any type of end sequence
+    """
+    # 首先检查output结束序列（优先级最高）
+    if is_output_end_sequence(byte_data, index, packet_size):
+        return True
+    
+    # 然后检查传统的结束序列
+    return is_end_sequence(byte_data, index, packet_size)
 
 def parse_csv_data(csv_string):
     """
@@ -280,6 +356,7 @@ def test_decode():
     # Sample transfer data (mock)
     transfer_hex = "7001E803E5036C01DC02E5038201FC03B503" + "FFFFFFFFFFFFFFFF"
     transient_hex = "03000000E50310000000E50320000000E503" + "FEFEFEFEFEFEFEFE"
+    output_hex = "7001E803E5036C01DC02E5038201FC03B503" + "CDABEFCDABEFCDAB"  # *** 新增output测试数据 ***
     
     print("Testing Transfer Decoding:")
     transfer_bytes = decode_hex_to_bytes(transfer_hex)
@@ -290,6 +367,11 @@ def test_decode():
     transient_bytes = decode_hex_to_bytes(transient_hex)
     transient_data = decode_bytes_to_data(transient_bytes, 'transient')
     logger.info(f"Decoded {len(transient_data)} points from transient data")
+    
+    print("\nTesting Output Decoding:")
+    output_bytes = decode_hex_to_bytes(output_hex)
+    output_data = decode_bytes_to_data(output_bytes, 'output')
+    logger.info(f"Decoded {len(output_data)} points from output data")
     
     print("\nTesting CSV Parsing:")
     csv_test = """Vd,Id(Vg=0mV),Id(Vg=200mV),Id(Vg=400mV)

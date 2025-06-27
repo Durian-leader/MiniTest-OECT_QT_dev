@@ -95,9 +95,10 @@ async def send_progress(test_id: str, progress: float, step_type: str, device_id
     await send_message(test_id, message, is_test_id=True)
 
 async def send_data(test_id: str, data: Any, step_type: str, device_id: Optional[str] = None,
-                  workflow_info: Optional[Dict[str, Any]] = None):
+                  workflow_info: Optional[Dict[str, Any]] = None, 
+                  output_metadata: Optional[Dict[str, Any]] = None):
     """
-    发送数据消息的便捷函数
+    发送数据消息的便捷函数 - *** 新增output_metadata支持 ***
     
     Args:
         test_id: 测试ID
@@ -105,6 +106,7 @@ async def send_data(test_id: str, data: Any, step_type: str, device_id: Optional
         step_type: 步骤类型
         device_id: 设备ID(可选)
         workflow_info: 工作流信息(可选)
+        output_metadata: output类型特有的元数据(可选)
     """
     # 构建数据消息
     message = {
@@ -122,6 +124,10 @@ async def send_data(test_id: str, data: Any, step_type: str, device_id: Optional
     if workflow_info:
         message["is_workflow"] = True
         message["workflow_info"] = workflow_info
+    
+    # *** 新增：添加output元数据 ***
+    if output_metadata:
+        message["output_metadata"] = output_metadata
     
     # 发送消息
     await send_message(test_id, message, is_test_id=True)
