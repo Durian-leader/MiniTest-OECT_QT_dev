@@ -4,3 +4,6 @@ pyqtgraph
 pyserial
 pyserial-asyncio
 logging
+
+# 用于打包
+pillow

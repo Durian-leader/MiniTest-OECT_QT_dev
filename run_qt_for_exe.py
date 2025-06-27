@@ -28,3 +28,4 @@ if __name__ == "__main__":
     _bootstrap()
 
 # pyinstaller --onefile --windowed --noconfirm run_qt_for_exe.py
+# pyinstaller --onefile --windowed --icon=my_icon.ico --add-data="my_icon.ico;." run_qt_for_exe.py

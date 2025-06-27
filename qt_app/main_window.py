@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget,
                            QStatusBar, QMessageBox)
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon
 
 # Import our custom widgets
 from qt_app.widgets.device_control import DeviceControlWidget
@@ -38,8 +39,9 @@ class MainWindow(QMainWindow):
     
     def __init__(self, backend):
         super().__init__()
-        self.setWindowTitle("OECT 测试上位机")
+        self.setWindowTitle("MiniTest-OECT 上位机")
         self.setGeometry(100, 100, 1280, 800)
+        self.setWindowIcon(QIcon("my_icon.ico"))  # your_icon.ico 放在资源目录下或指定绝对路径
         
         # Store backend
         self.backend = backend

@@ -5,7 +5,7 @@ a = Analysis(
     ['run_qt_for_exe.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('my_icon.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,4 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['my_icon.ico'],
 )
