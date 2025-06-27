@@ -1081,15 +1081,26 @@ def initialize_test_step_classes(data_bridge):
         def add_data(self, test_id, step_type, hex_data, workflow_info):
             """添加数据到对应步骤的缓冲区"""
             buffer = self.buffers[test_id][step_type]
-            
+
             # 检测步骤变化 - 如果step_index变了，立即刷新旧缓冲区
             current_step_index = workflow_info.get('step_index', 0) if workflow_info else 0
-            if (buffer['step_info'] and 
-                buffer['step_info'].get('step_index', 0) != current_step_index):
-                
-                print(f"检测到步骤变化: {buffer['step_info'].get('step_index')} -> {current_step_index}")
+            if (
+                buffer['step_info'] and
+                buffer['step_info'].get('step_index', 0) != current_step_index
+            ):
+                print(
+                    f"检测到步骤变化: {buffer['step_info'].get('step_index')} -> {current_step_index}"
+                )
                 self.flush_all_buffers_for_test(test_id)
-            
+
+            # 如果是output步骤，检测栅压切换
+            gate_voltage_changed = False
+            if step_type == 'output':
+                last_vg = buffer['step_info'].get('gate_voltage') if buffer['step_info'] else None
+                current_vg = workflow_info.get('gate_voltage') if workflow_info else None
+                if last_vg is not None and current_vg is not None and last_vg != current_vg:
+                    gate_voltage_changed = True
+
             # 添加数据
             buffer['data'].append({
                 'hex_data': hex_data,
@@ -1097,13 +1108,19 @@ def initialize_test_step_classes(data_bridge):
                 'timestamp': time.time()
             })
             buffer['step_info'] = workflow_info
-            
-            # 检查是否需要刷新（15个数据包或80ms超时）
+
+            # output模式在栅压切换时立即刷新
+            if step_type == 'output':
+                if gate_voltage_changed:
+                    self.flush_buffer(test_id, step_type)
+                return
+
+            # 其他类型: 检查是否需要刷新（15个数据包或80ms超时）
             should_flush = (
                 len(buffer['data']) >= 15 or
                 time.time() - buffer['last_flush'] >= 0.08
             )
-            
+
             if should_flush:
                 self.flush_buffer(test_id, step_type)
         
