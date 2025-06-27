@@ -100,7 +100,7 @@ class OutputStep(TestStep):
             
             def data_callback_wrapper(hex_data, dev_id: str):
                 # 为数据添加栅极电压标识
-                self.data_callback(hex_data, dev_id)
+                self.data_callback(hex_data, dev_id, {"gate_voltage": gate_voltage})
             
             data_result, reason = await self.device.send_and_receive_command(
                 command=cmd_str,

@@ -1091,13 +1091,20 @@ def initialize_test_step_classes(data_bridge):
                 self.flush_all_buffers_for_test(test_id)
             
             # 添加数据
+            # 检测栅极电压变化（针对output步骤）
+            current_vg = workflow_info.get('gate_voltage') if workflow_info else None
+            if (buffer['step_info'] and
+                buffer['step_info'].get('gate_voltage') != current_vg and
+                current_vg is not None):
+                self.flush_buffer(test_id, step_type)
+
             buffer['data'].append({
                 'hex_data': hex_data,
                 'workflow_info': workflow_info,
                 'timestamp': time.time()
             })
             buffer['step_info'] = workflow_info
-            
+
             # 检查是否需要刷新（15个数据包或80ms超时）
             should_flush = (
                 len(buffer['data']) >= 15 or
@@ -1212,7 +1219,7 @@ def initialize_test_step_classes(data_bridge):
             logger.error(f"发送进度失败: {e}")
     
     # 重写数据回调
-    def step_aware_data_callback(self, hex_data, dev_id: str):
+    def step_aware_data_callback(self, hex_data, dev_id: str, extra_info=None):
         test_id = self.step_id
         step_type = self.get_step_type()  # 获取当前步骤类型
         
@@ -1231,6 +1238,10 @@ def initialize_test_step_classes(data_bridge):
                 "path_readable": self.format_workflow_path(workflow_path),
                 "iteration_info": self.workflow_progress_info.get("iteration_info")
             })
+
+        # 额外信息（如栅极电压）
+        if extra_info:
+            workflow_info.update(extra_info)
         
         # 添加到对应步骤类型的缓冲区
         global_buffer.add_data(test_id, step_type, hex_data, workflow_info)
