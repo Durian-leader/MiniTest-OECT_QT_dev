@@ -10,7 +10,7 @@ from qt_app.utils.decoder import decode_hex_to_bytes, decode_bytes_to_data
 class RealtimePlotWidget(QWidget):
     """
     Widget for displaying real-time test data with sliding window
-    and step separation - 支持output多曲线实时显示（简化版本）
+    and step separation - 支持output多曲线实时显示（修复时序版本）
     """
     
     def __init__(self, port, test_id=None):
@@ -37,6 +37,10 @@ class RealtimePlotWidget(QWidget):
         # *** 新增：Output类型特有的数据管理 ***
         self.output_curves_data = {}  # {gate_voltage: {'x': [...], 'y': [...]}}
         self.current_output_gate_voltage = None  # 当前正在接收的栅极电压
+        
+        # *** 新增：时序修复相关 ***
+        self.output_data_buffer = []  # 缓存等待处理的output数据
+        self.expected_gate_voltages = set()  # 预期的栅极电压集合
         
         # 数据统计
         self.total_received_points = 0  # 总接收点数（包括被丢弃的）
@@ -225,6 +229,8 @@ class RealtimePlotWidget(QWidget):
         # *** 清除output特有数据 ***
         self.output_curves_data = {}
         self.current_output_gate_voltage = None
+        self.output_data_buffer = []
+        self.expected_gate_voltages = set()
         
         # 清除所有绘图曲线
         for line in self.plot_lines.values():
@@ -266,6 +272,8 @@ class RealtimePlotWidget(QWidget):
         # *** 重置output特有数据 ***
         self.output_curves_data = {}
         self.current_output_gate_voltage = None
+        self.output_data_buffer = []
+        self.expected_gate_voltages = set()
         
         # 清除图例和曲线
         self.legend.clear()
@@ -287,6 +295,9 @@ class RealtimePlotWidget(QWidget):
         """标记测试完成但不立即停止更新"""
         self.test_completed = True
         self.update_status_label()
+        
+        # *** 测试完成时，处理所有缓冲的数据 ***
+        self.flush_output_data_buffer()
     
     def set_path_readable(self, path):
         """Set the readable workflow path"""
@@ -299,19 +310,44 @@ class RealtimePlotWidget(QWidget):
     
     def parse_output_metadata(self, hex_data):
         """
-        *** 新增：解析hex数据中的output元数据前缀 ***
+        *** 解析hex数据中的output元数据前缀（支持开始信号） ***
         
         Args:
             hex_data: 可能包含元数据前缀的hex数据字符串
             
         Returns:
-            tuple: (output_metadata_dict, clean_hex_data) 或 (None, hex_data)
+            tuple: (signal_type, output_metadata_dict, clean_hex_data)
         """
         if not isinstance(hex_data, str):
-            return None, hex_data
+            return None, None, hex_data
             
+        # 检查是否有output开始信号：OUTPUT_START:{gate_voltage}:{index}:{total}|
+        if hex_data.startswith("OUTPUT_START:"):
+            try:
+                # 分割前缀（开始信号没有实际数据部分）
+                meta_part = hex_data.rstrip("|")
+                
+                # 解析元数据：OUTPUT_START:{gate_voltage}:{index}:{total}
+                meta_parts = meta_part.split(":")
+                if len(meta_parts) == 4 and meta_parts[0] == "OUTPUT_START":
+                    gate_voltage = int(meta_parts[1])
+                    gate_voltage_index = int(meta_parts[2])
+                    total_gate_voltages = int(meta_parts[3])
+                    
+                    output_metadata = {
+                        "gate_voltage": gate_voltage,
+                        "gate_voltage_index": gate_voltage_index,
+                        "total_gate_voltages": total_gate_voltages,
+                        "is_output_curve": True
+                    }
+                    
+                    return "start", output_metadata, ""
+                    
+            except (ValueError, IndexError) as e:
+                print(f"解析output开始信号失败: {e}")
+        
         # 检查是否有output元数据前缀：OUTPUT_META:{gate_voltage}:{index}:{total}|
-        if hex_data.startswith("OUTPUT_META:"):
+        elif hex_data.startswith("OUTPUT_META:"):
             try:
                 # 分割前缀和实际数据
                 meta_part, actual_hex_data = hex_data.split("|", 1)
@@ -330,15 +366,58 @@ class RealtimePlotWidget(QWidget):
                         "is_output_curve": True
                     }
                     
-                    return output_metadata, actual_hex_data
+                    return "data", output_metadata, actual_hex_data
                     
             except (ValueError, IndexError) as e:
                 print(f"解析output元数据失败: {e}")
         
-        return None, hex_data
+        return None, None, hex_data
+    
+    def prepare_output_curve(self, gate_voltage: int, total_gate_voltages: int):
+        """
+        *** 新增：提前准备output曲线，避免时序问题 ***
+        """
+        curve_name = f"Id(Vg={gate_voltage}mV)"
+        
+        # 记录预期的栅极电压
+        self.expected_gate_voltages.add(gate_voltage)
+        
+        # 确保有对应的曲线数据结构
+        if curve_name not in self.output_curves_data:
+            self.output_curves_data[curve_name] = {'x': [], 'y': []}
+        
+        # 确保有对应的绘图曲线
+        if curve_name not in self.plot_lines:
+            # 创建新的绘图曲线
+            colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k', 'orange', 'purple', 'brown']
+            color_idx = len(self.plot_lines) % len(colors)
+            
+            line = self.plot_widget.plot([], [], 
+                                       pen=pg.mkPen(color=colors[color_idx], width=2),
+                                       name=curve_name)
+            self.plot_lines[curve_name] = line
+            
+            print(f"为栅极电压 {gate_voltage}mV 创建曲线: {curve_name}")
+        
+        # 更新坐标轴标签
+        self.plot_widget.setLabel('bottom', 'Drain Voltage (V)')
+        self.plot_widget.setLabel('left', 'Current (A)')
+        self.plot_widget.setTitle('输出特性曲线（实时）')
+    
+    def flush_output_data_buffer(self):
+        """
+        *** 新增：处理缓冲的output数据 ***
+        """
+        if self.output_data_buffer:
+            print(f"处理缓冲的output数据: {len(self.output_data_buffer)} 条")
+            
+            for hex_data, output_metadata in self.output_data_buffer:
+                self.process_output_realtime_data_immediate(hex_data, output_metadata)
+            
+            self.output_data_buffer.clear()
     
     def process_message(self, message):
-        """处理来自后端的消息 - 步骤分离版本，支持output多曲线实时hex数据（简化版）"""
+        """处理来自后端的消息 - 步骤分离版本，支持output多曲线实时hex数据（修复时序版）"""
         try:
             msg_type = message.get("type")
             self.debug_label.setText(f"Received: {msg_type}")
@@ -361,8 +440,11 @@ class RealtimePlotWidget(QWidget):
                 # 构造唯一的步骤ID
                 step_id = f"{step_index}-{step_type}-{path_readable}"
                 
-                # 检测步骤变化 - 核心改进
-                if self.auto_step_reset_check.isChecked() and step_id != self.current_step_id and self.current_step_id:
+                # *** 修改：更保守的步骤变化检测，避免在同一步骤内重置 ***
+                if (self.auto_step_reset_check.isChecked() and 
+                    step_id != self.current_step_id and 
+                    self.current_step_id and 
+                    step_index != self.current_step_index):  # 增加步骤索引检查
                     # 步骤发生变化，重置图表
                     self.clear_data()
                     self.debug_label.setText(f"步骤变化: {self.current_step_type} → {step_type}")
@@ -379,17 +461,26 @@ class RealtimePlotWidget(QWidget):
                 else:
                     self.step_info_label.setText(f"当前: {step_type}模式")
                 
-                # *** 关键改进：解析output元数据 ***
+                # *** 关键改进：解析output元数据和开始信号 ***
                 if step_type == 'output':
                     # 尝试解析output元数据
-                    output_metadata, clean_hex_data = self.parse_output_metadata(hex_data)
+                    signal_type, output_metadata, clean_hex_data = self.parse_output_metadata(hex_data)
                     
-                    if output_metadata:
-                        # 有元数据：多曲线模式
+                    if signal_type == "start":
+                        # 处理开始信号：提前准备曲线
+                        gate_voltage = output_metadata["gate_voltage"]
+                        total_gate_voltages = output_metadata["total_gate_voltages"]
+                        self.prepare_output_curve(gate_voltage, total_gate_voltages)
+                        self.debug_label.setText(f"准备output曲线: Vg={gate_voltage}mV")
+                        
+                    elif signal_type == "data" and output_metadata:
+                        # 处理实际数据：多曲线模式
                         self.process_output_realtime_data(clean_hex_data, output_metadata, step_id)
+                        
                     else:
                         # 无元数据：单曲线模式（向后兼容）
                         self.process_output_as_single_curve(hex_data, step_id)
+                        
                 elif step_type == 'transient':
                     # Transient类型：传统处理方式
                     self.process_traditional_data(hex_data, step_type, step_id)
@@ -425,19 +516,19 @@ class RealtimePlotWidget(QWidget):
         self.plot_widget.setLabel('left', 'Current (A)')
         self.plot_widget.setTitle("输出特性 - 电流 vs 漏压")
         
-        # 确保有默认曲线
-        default_curve = "Output Current"
-        if default_curve not in self.plot_lines:
-            line = self.plot_widget.plot([], [], 
-                                       pen=pg.mkPen(color='b', width=2),
-                                       name=default_curve)
-            self.plot_lines[default_curve] = line
+        # # 确保有默认曲线
+        # default_curve = "Output Current"
+        # if default_curve not in self.plot_lines:
+        #     line = self.plot_widget.plot([], [], 
+        #                                pen=pg.mkPen(color='b', width=2),
+        #                                name=default_curve)
+        #     self.plot_lines[default_curve] = line
             
-        if default_curve not in self.data_y_dict:
-            self.data_y_dict[default_curve] = np.array([])
+        # if default_curve not in self.data_y_dict:
+        #     self.data_y_dict[default_curve] = np.array([])
             
-        if default_curve not in self.new_point_buffer_y_dict:
-            self.new_point_buffer_y_dict[default_curve] = []
+        # if default_curve not in self.new_point_buffer_y_dict:
+        #     self.new_point_buffer_y_dict[default_curve] = []
         
         # 解析数据（output和transfer格式相同）
         byte_data = decode_hex_to_bytes(hex_data)
@@ -462,7 +553,7 @@ class RealtimePlotWidget(QWidget):
     
     def process_output_realtime_data(self, hex_data, output_metadata, step_id):
         """
-        *** 处理output类型的实时hex数据（多曲线模式） ***
+        *** 处理output类型的实时hex数据（多曲线模式，修复时序） ***
         """
         if not hex_data:
             return
@@ -472,33 +563,39 @@ class RealtimePlotWidget(QWidget):
         gate_voltage_index = output_metadata.get("gate_voltage_index", 0)
         total_gate_voltages = output_metadata.get("total_gate_voltages", 1)
         
-        # 检查是否开始新的栅极电压扫描
-        if self.current_output_gate_voltage != gate_voltage:
-            # 切换到新的栅极电压
-            self.current_output_gate_voltage = gate_voltage
-            
-            # 确保有对应的曲线数据结构
-            curve_name = f"Id(Vg={gate_voltage}mV)"
-            if curve_name not in self.output_curves_data:
-                self.output_curves_data[curve_name] = {'x': [], 'y': []}
-            
-            # 确保有对应的绘图曲线
-            if curve_name not in self.plot_lines:
-                # 创建新的绘图曲线
-                colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k', 'orange', 'purple', 'brown']
-                color_idx = len(self.plot_lines) % len(colors)
-                
-                line = self.plot_widget.plot([], [], 
-                                           pen=pg.mkPen(color=colors[color_idx], width=2),
-                                           name=curve_name)
-                self.plot_lines[curve_name] = line
-            
-            self.debug_label.setText(f"Output扫描: Vg={gate_voltage}mV ({gate_voltage_index+1}/{total_gate_voltages})")
+        curve_name = f"Id(Vg={gate_voltage}mV)"
         
-        # 更新坐标轴标签
-        self.plot_widget.setLabel('bottom', 'Drain Voltage (V)')
-        self.plot_widget.setLabel('left', 'Current (A)')
-        self.plot_widget.setTitle('输出特性曲线（实时）')
+        # *** 关键修复：检查曲线是否已准备好 ***
+        if curve_name not in self.plot_lines or curve_name not in self.output_curves_data:
+            # 曲线还没准备好，缓存数据
+            print(f"曲线 {curve_name} 还没准备好，缓存数据")
+            self.output_data_buffer.append((hex_data, output_metadata))
+            
+            # 立即准备曲线
+            self.prepare_output_curve(gate_voltage, total_gate_voltages)
+            
+            # 然后立即处理缓冲的数据
+            self.flush_output_data_buffer()
+            return
+        
+        # 处理实际数据
+        self.process_output_realtime_data_immediate(hex_data, output_metadata)
+    
+    def process_output_realtime_data_immediate(self, hex_data, output_metadata):
+        """
+        *** 立即处理output数据（不检查时序） ***
+        """
+        # 获取栅极电压信息
+        gate_voltage = output_metadata.get("gate_voltage", 0)
+        gate_voltage_index = output_metadata.get("gate_voltage_index", 0)
+        total_gate_voltages = output_metadata.get("total_gate_voltages", 1)
+        
+        curve_name = f"Id(Vg={gate_voltage}mV)"
+        
+        # 更新当前栅极电压
+        if self.current_output_gate_voltage != gate_voltage:
+            self.current_output_gate_voltage = gate_voltage
+            self.debug_label.setText(f"Output扫描: Vg={gate_voltage}mV ({gate_voltage_index+1}/{total_gate_voltages})")
         
         # 解析hex数据
         byte_data = decode_hex_to_bytes(hex_data)
@@ -508,9 +605,7 @@ class RealtimePlotWidget(QWidget):
         # 解析新数据点 - 使用transfer模式（因为output和transfer数据格式相同）
         new_points = decode_bytes_to_data(byte_data, mode='transfer')
         
-        if new_points and self.current_output_gate_voltage is not None:
-            curve_name = f"Id(Vg={self.current_output_gate_voltage}mV)"
-            
+        if new_points and curve_name in self.output_curves_data:
             # 添加数据点到对应曲线
             for point in new_points:
                 self.output_curves_data[curve_name]['x'].append(point[0])
@@ -528,16 +623,16 @@ class RealtimePlotWidget(QWidget):
                         curve_data['y'] = curve_data['y'][-max_points_per_curve:]
             
             # 更新曲线显示
-            for curve_name, curve_data in self.output_curves_data.items():
-                if curve_name in self.plot_lines and curve_data['x']:
-                    self.plot_lines[curve_name].setData(curve_data['x'], curve_data['y'])
+            for curve_name_update, curve_data in self.output_curves_data.items():
+                if curve_name_update in self.plot_lines and curve_data['x']:
+                    self.plot_lines[curve_name_update].setData(curve_data['x'], curve_data['y'])
             
             # 更新数据计数
             total_points = sum(len(data['x']) for data in self.output_curves_data.values())
             curve_count = len(self.output_curves_data)
             self.data_count_label.setText(f"显示: {total_points} 点 ({curve_count} 曲线)")
             
-            self.debug_label.setText(f"Added {len(new_points)} points to {curve_name}")
+            print(f"添加 {len(new_points)} 个数据点到 {curve_name}")
     
     def process_traditional_data(self, hex_data, step_type, step_id):
         """处理传统的hex数据（transfer和transient）"""
@@ -691,6 +786,8 @@ class RealtimePlotWidget(QWidget):
         # *** 重置output特有数据 ***
         self.output_curves_data = {}
         self.current_output_gate_voltage = None
+        self.output_data_buffer = []
+        self.expected_gate_voltages = set()
         
         # 清除图例和曲线
         self.legend.clear()

@@ -39,6 +39,9 @@ class OutputStep(TestStep):
         # *** 新增：当前栅极电压跟踪 ***
         self.current_gate_voltage = None
         
+        # *** 新增：数据缓冲区，防止时序问题导致数据丢失 ***
+        self.pending_data_buffer = []  # 缓存还没发送的数据
+        
     def get_step_type(self) -> str:
         return "output"
         
@@ -77,36 +80,74 @@ class OutputStep(TestStep):
         cmd_list = gen_output_cmd(temp_params)
         return bytes_to_hex(cmd_list)
     
+    def flush_pending_data(self):
+        """
+        *** 新增：清空待发送的数据缓冲区 ***
+        """
+        if self.pending_data_buffer:
+            logger.debug(f"清空待发送数据缓冲区，共 {len(self.pending_data_buffer)} 条数据")
+            for hex_data, dev_id in self.pending_data_buffer:
+                # 发送缓冲的数据，使用当前的栅极电压
+                self.send_enhanced_data(hex_data, dev_id, self.current_gate_voltage)
+            self.pending_data_buffer.clear()
+    
+    def send_enhanced_data(self, hex_data: str, dev_id: str, gate_voltage: int):
+        """
+        *** 新增：发送增强数据的统一方法 ***
+        """
+        try:
+            if gate_voltage is None:
+                # 如果栅极电压还没设置，缓存数据
+                logger.debug(f"栅极电压未设置，缓存数据: {len(hex_data)} 字符")
+                self.pending_data_buffer.append((hex_data, dev_id))
+                return
+                
+            # 构造output元数据
+            output_metadata = {
+                "gate_voltage": gate_voltage,
+                "gate_voltage_index": self.gate_voltages.index(gate_voltage),
+                "total_gate_voltages": len(self.gate_voltages),
+                "is_output_curve": True
+            }
+            
+            # 将元数据编码为特殊标记字符串
+            # 格式: OUTPUT_META:{gate_voltage}:{index}:{total}|{hex_data}
+            meta_prefix = f"OUTPUT_META:{gate_voltage}:{self.gate_voltages.index(gate_voltage)}:{len(self.gate_voltages)}|"
+            enhanced_hex_data = meta_prefix + hex_data
+            
+            # 使用原有的data_callback传递增强后的数据
+            self.data_callback(enhanced_hex_data, dev_id)
+            
+            logger.debug(f"发送增强output数据: test_id={self.step_id}, gate_voltage={gate_voltage}mV, data_len={len(hex_data)}")
+        except Exception as e:
+            logger.error(f"发送output数据失败: {str(e)}")
+            # 降级：如果失败就发送原始数据
+            self.data_callback(hex_data, dev_id)
+    
     def create_enhanced_data_callback(self, gate_voltage: int):
         """
         *** 创建增强的数据回调函数，添加output元数据到hex数据 ***
         """
         def enhanced_data_callback(hex_data, dev_id: str):
-            try:
-                # *** 关键思路：将元数据编码到hex数据的特殊前缀中 ***
-                # 创建一个特殊的标记，让前端能识别这是output数据
-                output_metadata = {
-                    "gate_voltage": gate_voltage,
-                    "gate_voltage_index": self.gate_voltages.index(gate_voltage),
-                    "total_gate_voltages": len(self.gate_voltages),
-                    "is_output_curve": True
-                }
-                
-                # 将元数据编码为特殊标记字符串
-                # 格式: OUTPUT_META:{gate_voltage}:{index}:{total}|{hex_data}
-                meta_prefix = f"OUTPUT_META:{gate_voltage}:{self.gate_voltages.index(gate_voltage)}:{len(self.gate_voltages)}|"
-                enhanced_hex_data = meta_prefix + hex_data
-                
-                # 使用原有的data_callback传递增强后的数据
-                self.data_callback(enhanced_hex_data, dev_id)
-                
-                logger.debug(f"发送增强output数据: test_id={self.step_id}, gate_voltage={gate_voltage}mV")
-            except Exception as e:
-                logger.error(f"发送output数据失败: {str(e)}")
-                # 降级：如果失败就发送原始数据
-                self.data_callback(hex_data, dev_id)
+            # 使用统一的发送方法
+            self.send_enhanced_data(hex_data, dev_id, gate_voltage)
         
         return enhanced_data_callback
+    
+    async def send_gate_voltage_start_signal(self, gate_voltage: int, dev_id: str):
+        """
+        *** 新增：发送栅极电压开始信号，让前端提前准备曲线 ***
+        """
+        try:
+            # 发送一个特殊的开始信号
+            start_signal = f"OUTPUT_START:{gate_voltage}:{self.gate_voltages.index(gate_voltage)}:{len(self.gate_voltages)}|"
+            self.data_callback(start_signal, dev_id)
+            logger.debug(f"发送栅极电压开始信号: {gate_voltage}mV")
+            
+            # 给前端一点时间处理
+            await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.error(f"发送栅极电压开始信号失败: {str(e)}")
         
     async def execute(self):
         """Execute the output test step for all gate voltages"""
@@ -118,8 +159,14 @@ class OutputStep(TestStep):
         for i, gate_voltage in enumerate(self.gate_voltages):
             logger.info(f"扫描栅极电压 {gate_voltage} mV ({i+1}/{len(self.gate_voltages)})")
             
-            # *** 关键修改：设置当前栅极电压 ***
+            # *** 关键修改1：先设置当前栅极电压 ***
             self.current_gate_voltage = gate_voltage
+            
+            # *** 关键修改2：清空之前的缓冲数据 ***
+            self.flush_pending_data()
+            
+            # *** 关键修改3：发送栅极电压开始信号 ***
+            await self.send_gate_voltage_start_signal(gate_voltage, "device_placeholder")
             
             # 更新进度
             base_progress = i / len(self.gate_voltages)
@@ -148,6 +195,9 @@ class OutputStep(TestStep):
                 data_callback=enhanced_data_callback  # 使用增强回调
             )
             
+            # *** 关键修改4：扫描完成后，确保所有缓冲数据都被发送 ***
+            self.flush_pending_data()
+            
             # 存储这次扫描的数据，并清理结束序列
             if data_result:
                 # 清理结束序列，防止影响下次扫描
@@ -161,6 +211,9 @@ class OutputStep(TestStep):
             # 扫描间隔（可选）
             if i < len(self.gate_voltages) - 1:
                 await asyncio.sleep(0.5)  # 500ms间隔
+        
+        # *** 关键修改5：测试结束前，最后一次清空缓冲区 ***
+        self.flush_pending_data()
         
         self.end_time = datetime.now().isoformat()
         
