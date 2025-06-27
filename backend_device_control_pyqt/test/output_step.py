@@ -91,6 +91,10 @@ class OutputStep(TestStep):
             cmd_str = self.generate_command(gate_voltage)
             
             # 执行单次扫描
+            # 在回调中附带当前栅压信息
+            self.workflow_progress_info["gate_voltage"] = gate_voltage
+            self.workflow_progress_info["gate_index"] = i
+
             def progress_callback_wrapper(length: int, dev_id: str):
                 # 计算当前扫描的进度
                 scan_progress = min(length / (self.calculate_total_bytes() / len(self.gate_voltages)), 1.0)
@@ -99,7 +103,7 @@ class OutputStep(TestStep):
                 self.progress_callback(int(total_progress * self.calculate_total_bytes()), dev_id)
             
             def data_callback_wrapper(hex_data, dev_id: str):
-                # 为数据添加栅极电压标识
+                # 为数据添加栅压信息
                 self.data_callback(hex_data, dev_id)
             
             data_result, reason = await self.device.send_and_receive_command(
@@ -124,6 +128,10 @@ class OutputStep(TestStep):
             # 扫描间隔（可选）
             if i < len(self.gate_voltages) - 1:
                 await asyncio.sleep(0.5)  # 500ms间隔
+
+        # 清理附加信息
+        self.workflow_progress_info.pop("gate_voltage", None)
+        self.workflow_progress_info.pop("gate_index", None)
         
         self.end_time = datetime.now().isoformat()
         
