@@ -441,7 +441,53 @@ class DeviceControlWidget(QWidget):
         if not self.selected_port:
             QMessageBox.warning(self, "Warning", "请先选择一个设备")
             return
-        
+        # *** 新增：检查设备是否已在测试中 ***
+        if self.selected_port in self.current_test_ids:
+            current_test_id = self.current_test_ids[self.selected_port]
+            
+            # 获取设备信息用于显示
+            device_info = None
+            for i in range(self.device_list.count()):
+                item = self.device_list.item(i)
+                if item.data(Qt.UserRole) == self.selected_port:
+                    device_info = item.data(Qt.UserRole + 1)
+                    break
+            
+            device_name = device_info.get('device_id', self.selected_port) if device_info else self.selected_port
+            
+            # 弹出警告对话框
+            reply = QMessageBox.question(
+                self, 
+                "设备正在测试中", 
+                f"设备 {device_name} 正在进行测试 (ID: {current_test_id})\n\n"
+                f"您可以选择:\n"
+                f"• 点击'是'停止当前测试并开启新的测试\n"
+                f"• 点击'否'保持当前测试", 
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                # 用户选择停止当前测试
+                self.stop_workflow()
+                # 等待一下确保停止完成
+                QTimer.singleShot(500, self._start_workflow_after_stop)
+                return
+            else:
+                # 用户选择不停止，直接返回
+                return
+            # 继续原有的启动流程
+        self._execute_start_workflow()
+    def _start_workflow_after_stop(self):
+        """停止测试后启动新测试"""
+        # 检查是否确实停止了
+        if self.selected_port not in self.current_test_ids:
+            self._execute_start_workflow()
+        else:
+            QMessageBox.warning(self, "Warning", "停止测试失败，请稍后重试")
+    
+    def _execute_start_workflow(self):
+        """执行启动工作流的实际逻辑（原start_workflow的主要部分）"""
         # Get workflow steps
         steps = self.workflow_editor.get_steps()
         if not steps:
@@ -468,13 +514,10 @@ class DeviceControlWidget(QWidget):
         
         # 在这里处理测试名称 - 如果启用了自动命名，生成新名称
         if self.auto_naming:
-            # 直接在这里生成名称，而不是调用generate_test_name
             device_id = device_info.get('device_id', self.selected_port)
             timestamp = time.strftime('%Y%m%d%H%M%S')
             test_name = f"测试_{device_id}_{timestamp}"
-            # 更新UI显示
             self.test_name_edit.setText(test_name)
-
         
         # Get test name and description from input fields
         test_name = self.test_name_edit.text().strip()
@@ -519,9 +562,6 @@ class DeviceControlWidget(QWidget):
                 # Update plot visibility
                 self.update_plot_visibility()
                 
-                # Update device list to show active test
-                # self.refresh_devices()
-                
                 # Update device info to show test ID
                 if device_info:
                     info_text = f"当前设备: {device_info['description']}"
@@ -531,11 +571,7 @@ class DeviceControlWidget(QWidget):
                     info_text += f"<br><small>测试名称: {test_name}</small>"
                     self.device_info.setText(info_text)
                 
-                # QMessageBox.information(self, "Success", f"测试启动成功: {test_id}")
                 
-                # # Generate new default name for next test if auto-naming is enabled
-                # if self.auto_naming:
-                #     self.generate_test_name()
                 # Clear description
                 self.test_desc_edit.clear()
             else:
@@ -543,7 +579,6 @@ class DeviceControlWidget(QWidget):
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"启动测试时发生错误: {str(e)}")
-    
     def stop_workflow(self):
         """Stop workflow for the selected device"""
         if not self.selected_port:

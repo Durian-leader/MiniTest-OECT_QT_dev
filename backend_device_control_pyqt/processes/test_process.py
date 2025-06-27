@@ -1057,12 +1057,12 @@ def initialize_test_step_classes(data_bridge):
                             workflow_info=first_info  # 使用第一个数据包的信息
                         )
                     )
-                    print(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_hex)}")
+                    logger.debug(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_hex)}")
                 except RuntimeError:
                     # 如果没有事件循环，直接发送
                     pass
                 except Exception as e:
-                    print(f"发送缓冲数据失败: {e}")
+                    logger.debug(f"发送缓冲数据失败: {e}")
             
             buffer['last_flush'] = time.time()
         

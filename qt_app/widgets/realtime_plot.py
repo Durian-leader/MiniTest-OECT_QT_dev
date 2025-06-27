@@ -217,6 +217,9 @@ class RealtimePlotWidget(QWidget):
         self.plot_line.setData([], [])
         self.data_count_label.setText("Points: 0")
         self.debug_label.setText("图表已手动清除")
+
+        # # 新增：重置视图范围到自动模式
+        # self.sliding_window()
     
     def update_status_label(self):
         """Update the status label with current info"""
@@ -321,7 +324,11 @@ class RealtimePlotWidget(QWidget):
                 else:
                     self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
                     self.plot_widget.setTitle("转移特性 - 电流 vs 栅压")
-                
+
+                # 新增：坐标轴标签更新后，重置视图范围
+                if step_id != self.current_step_id or len(self.data_x) == 0:
+                    self.sliding_window()
+
                 # 解析数据
                 byte_data = decode_hex_to_bytes(hex_data)
                 if not byte_data:
@@ -377,6 +384,9 @@ class RealtimePlotWidget(QWidget):
         if self.data_x.size == 0:
             self.data_x = buffer_x
             self.data_y = buffer_y
+            # # 新增：新数据时确保自动范围
+            # self.sliding_window()
+            self.plot_widget.enableAutoRange(x=True, y=True)
         else:
             # 连接到现有数组
             self.data_x = np.append(self.data_x, buffer_x)
@@ -406,6 +416,16 @@ class RealtimePlotWidget(QWidget):
         self.plot_line.setData(self.data_x, self.data_y)
         
         # 滚动窗口支持
+        self.sliding_window()
+        # 更新数据计数 - 显示保留点数和总接收点数
+        if self.use_circular_buffer and self.total_received_points > self.MAX_POINTS:
+            # 显示已被丢弃的数据点信息
+            self.data_count_label.setText(
+                f"显示: {total_points}/{self.total_received_points} 点 (已丢弃: {self.total_received_points - total_points}点)"
+            )
+        else:
+            self.data_count_label.setText(f"Points: {total_points}")
+    def sliding_window(self):
         if self.current_step_type == 'transient' and self.auto_scrolling_enabled:
             if len(self.data_x) > 1:
                 max_time = np.max(self.data_x)
@@ -416,16 +436,6 @@ class RealtimePlotWidget(QWidget):
         else:
             # 其他图表类型自动调整范围
             self.plot_widget.enableAutoRange(x=True, y=True)
-        
-        # 更新数据计数 - 显示保留点数和总接收点数
-        if self.use_circular_buffer and self.total_received_points > self.MAX_POINTS:
-            # 显示已被丢弃的数据点信息
-            self.data_count_label.setText(
-                f"显示: {total_points}/{self.total_received_points} 点 (已丢弃: {self.total_received_points - total_points}点)"
-            )
-        else:
-            self.data_count_label.setText(f"Points: {total_points}")
-    
     def start_new_test(self, test_id):
         """开始新的测试"""
         self.test_id = test_id
