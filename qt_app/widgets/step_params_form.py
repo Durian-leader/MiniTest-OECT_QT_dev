@@ -7,6 +7,7 @@ from qt_app.widgets.custom_widgets import NoWheelSpinBox, NoWheelDoubleSpinBox
 class StepParamsFormWidget(QWidget):
     """
     Widget for editing step parameters with different form fields based on step type
+    支持正确显示output类型的栅极电压列表
     """
     
     # Signal when parameters are updated
@@ -191,7 +192,7 @@ class StepParamsFormWidget(QWidget):
         self.params_layout.addRow("循环次数:", self.cycles_spin)
 
     def create_output_fields(self):
-        """Create form fields for output step"""
+        """Create form fields for output step - 修改版本，支持栅极电压列表显示"""
         params = self.step.get("params", {})
         
         # isSweep - checkbox
@@ -282,11 +283,47 @@ class StepParamsFormWidget(QWidget):
                 self.gate_info_label.setText(f"❌ {error}")
                 self.gate_info_label.setStyleSheet("color: red;")
             elif values:
-                self.gate_info_label.setText(f"✓ 将扫描 {len(values)} 条输出特性曲线")
+                # 更加详细的信息显示
+                min_vg = min(values) / 1000.0  # 转换为V
+                max_vg = max(values) / 1000.0
+                avg_vg = sum(values) / len(values) / 1000.0
+                info_text = f"✓ {len(values)} 条输出特性曲线"
+                if len(values) > 1:
+                    info_text += f" (Vg范围: {min_vg:.3f}V ~ {max_vg:.3f}V)"
+                else:
+                    info_text += f" (Vg = {min_vg:.3f}V)"
+                    
+                self.gate_info_label.setText(info_text)
                 self.gate_info_label.setStyleSheet("color: green;")
             else:
                 self.gate_info_label.setText("⚠ 请输入有效的栅压值")
                 self.gate_info_label.setStyleSheet("color: orange;")
+
+    def on_output_param_changed(self):
+        """Handle output parameter changes"""
+        if "params" not in self.step:
+            self.step["params"] = {}
+        
+        params = self.step["params"]
+        params["timeStep"] = self.time_step_spin.value()
+        params["sourceVoltage"] = self.source_voltage_spin.value()
+        params["drainVoltageStart"] = self.drain_start_spin.value()
+        params["drainVoltageEnd"] = self.drain_end_spin.value()
+        params["drainVoltageStep"] = self.drain_step_spin.value()
+        
+        # 处理栅极电压列表
+        if hasattr(self, 'gate_voltage_edit'):
+            gate_text = self.gate_voltage_edit.text()
+            gate_values, error = self.parse_gate_voltage_list(gate_text)
+            if gate_values:
+                params["gateVoltageList"] = gate_values
+            else:
+                params["gateVoltageList"] = [0]  # 默认值
+            
+            # 更新信息显示
+            self.update_gate_voltage_info()
+        
+        self.params_updated.emit()
 
     def create_loop_fields(self):
         """Create form fields for loop step"""
@@ -343,32 +380,6 @@ class StepParamsFormWidget(QWidget):
         params["gateVoltageBottom"] = self.gate_bottom_spin.value()
         params["gateVoltageTop"] = self.gate_top_spin.value()
         params["cycles"] = self.cycles_spin.value()
-        
-        self.params_updated.emit()
-        
-    def on_output_param_changed(self):
-        """Handle output parameter changes"""
-        if "params" not in self.step:
-            self.step["params"] = {}
-        
-        params = self.step["params"]
-        params["timeStep"] = self.time_step_spin.value()
-        params["sourceVoltage"] = self.source_voltage_spin.value()
-        params["drainVoltageStart"] = self.drain_start_spin.value()
-        params["drainVoltageEnd"] = self.drain_end_spin.value()
-        params["drainVoltageStep"] = self.drain_step_spin.value()
-        
-        # 处理栅极电压列表
-        if hasattr(self, 'gate_voltage_edit'):
-            gate_text = self.gate_voltage_edit.text()
-            gate_values, error = self.parse_gate_voltage_list(gate_text)
-            if gate_values:
-                params["gateVoltageList"] = gate_values
-            else:
-                params["gateVoltageList"] = [0]  # 默认值
-            
-            # 更新信息显示
-            self.update_gate_voltage_info()
         
         self.params_updated.emit()
 

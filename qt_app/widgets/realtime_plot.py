@@ -10,7 +10,7 @@ from qt_app.utils.decoder import decode_hex_to_bytes, decode_bytes_to_data
 class RealtimePlotWidget(QWidget):
     """
     Widget for displaying real-time test data with sliding window
-    and step separation
+    and step separation - 支持output多曲线显示
     """
     
     def __init__(self, port, test_id=None):
@@ -30,21 +30,24 @@ class RealtimePlotWidget(QWidget):
         self.MAX_POINTS = 100000  # 最大存储点数
         self.use_circular_buffer = True  # 是否使用环形缓冲区限制内存使用
         
-        # 使用NumPy数组保存数据
+        # 使用NumPy数组保存数据 - 支持多曲线
         self.data_x = np.array([])
-        self.data_y = np.array([])
+        self.data_y_dict = {}  # 字典存储多条y数据，key为栅电压值或曲线名
         
         # 数据统计
         self.total_received_points = 0  # 总接收点数（包括被丢弃的）
         
-        # 数据缓冲机制
+        # 数据缓冲机制 - 支持多曲线
         self.new_point_buffer_x = []
-        self.new_point_buffer_y = []
+        self.new_point_buffer_y_dict = {}  # 字典存储多条y缓冲区
         self.buffer_size_threshold = 50  # 缓冲区阈值
         
         # 滚动窗口设置
         self.window_size = 10.0  # 10秒滑动窗口
         self.auto_scrolling_enabled = True
+        
+        # 当前步骤的栅电压列表（用于output类型）
+        self.current_gate_voltages = []
         
         # 设置UI
         self.setup_ui()
@@ -104,10 +107,6 @@ class RealtimePlotWidget(QWidget):
         self.symbol_check.toggled.connect(self.toggle_point_symbols)
         control_layout.addWidget(self.symbol_check,1)
         
-        # self.memory_info_label = QLabel(f"最大点数: {self.MAX_POINTS}")
-        # self.memory_info_label.setStyleSheet("color: #888;")
-        # control_layout.addWidget(self.memory_info_label, 1)
-        
         layout.addWidget(control_frame)
         
         # Path bar for workflow path
@@ -162,9 +161,11 @@ class RealtimePlotWidget(QWidget):
         self.plot_widget.setAntialiasing(False)  # 关闭抗锯齿
         self.plot_widget.setClipToView(True)  # 只渲染可见区域
         
-        # 配置曲线
-        self.plot_line = self.plot_widget.plot([], [], 
-                                             pen=pg.mkPen(color='b', width=2))
+        # 添加图例
+        self.legend = self.plot_widget.addLegend()
+        
+        # 配置曲线字典 - 支持多条曲线
+        self.plot_lines = {}  # key: 曲线名, value: PlotDataItem
         
         layout.addWidget(self.plot_widget)
         
@@ -191,7 +192,8 @@ class RealtimePlotWidget(QWidget):
             # 如果启用，且当前数据已超过最大值，立即裁剪
             if len(self.data_x) > self.MAX_POINTS:
                 self.data_x = self.data_x[-self.MAX_POINTS:]
-                self.data_y = self.data_y[-self.MAX_POINTS:]
+                for key in self.data_y_dict:
+                    self.data_y_dict[key] = self.data_y_dict[key][-self.MAX_POINTS:]
                 self.update_plot()
     
     def toggle_auto_scrolling(self, enabled):
@@ -200,26 +202,28 @@ class RealtimePlotWidget(QWidget):
     
     def toggle_point_symbols(self, enabled):
         """切换是否显示数据点符号"""
-        if enabled:
-            self.plot_line.setSymbol('o')
-            self.plot_line.setSymbolSize(4)
-            self.plot_line.setSymbolBrush(pg.mkBrush('b'))
-        else:
-            self.plot_line.setSymbol(None)
+        for line in self.plot_lines.values():
+            if enabled:
+                line.setSymbol('o')
+                line.setSymbolSize(4)
+                line.setSymbolBrush(pg.mkBrush('b'))
+            else:
+                line.setSymbol(None)
     
     def clear_data(self):
         """手动清除图表数据"""
         self.data_x = np.array([])
-        self.data_y = np.array([])
+        self.data_y_dict = {}
         self.new_point_buffer_x = []
-        self.new_point_buffer_y = []
+        self.new_point_buffer_y_dict = {}
         self.total_received_points = 0
-        self.plot_line.setData([], [])
+        
+        # 清除所有绘图曲线
+        for line in self.plot_lines.values():
+            line.setData([], [])
+        
         self.data_count_label.setText("Points: 0")
         self.debug_label.setText("图表已手动清除")
-
-        # # 新增：重置视图范围到自动模式
-        # self.sliding_window()
     
     def update_status_label(self):
         """Update the status label with current info"""
@@ -242,13 +246,20 @@ class RealtimePlotWidget(QWidget):
         # 重置步骤跟踪
         self.current_step_index = -1
         self.current_step_id = ""
+        self.current_gate_voltages = []
         
         # 重置数据
         self.data_x = np.array([])
-        self.data_y = np.array([])
+        self.data_y_dict = {}
         self.new_point_buffer_x = []
-        self.new_point_buffer_y = []
+        self.new_point_buffer_y_dict = {}
         self.total_received_points = 0
+        
+        # 清除图例和曲线
+        self.legend.clear()
+        for line in self.plot_lines.values():
+            self.plot_widget.removeItem(line)
+        self.plot_lines = {}
         
         # 更新UI
         self.update_status_label()
@@ -258,7 +269,6 @@ class RealtimePlotWidget(QWidget):
         self.step_info_label.setText("等待数据...")
         
         # 重置图表
-        self.plot_line.setData([], [])
         self.plot_widget.setTitle("Waiting for data...")
     
     def set_test_completed(self):
@@ -275,8 +285,55 @@ class RealtimePlotWidget(QWidget):
         else:
             self.path_frame.setVisible(False)
     
+    def parse_output_csv_data(self, csv_data_string):
+        """
+        解析CSV格式的output数据
+        
+        Args:
+            csv_data_string: CSV格式的字符串数据
+            
+        Returns:
+            dict: 解析后的数据，格式为 {x_values: [...], curves: {curve_name: [y_values]}}
+        """
+        try:
+            lines = csv_data_string.strip().split('\n')
+            if len(lines) < 2:
+                return None
+                
+            # 解析表头
+            header = lines[0].split(',')
+            x_label = header[0]  # 第一列是x轴标签（如Vd）
+            curve_labels = header[1:]  # 后续列是各条曲线的标签
+            
+            # 解析数据
+            x_values = []
+            curves = {label: [] for label in curve_labels}
+            
+            for line in lines[1:]:
+                values = line.split(',')
+                if len(values) == len(header):
+                    try:
+                        x_val = float(values[0])
+                        x_values.append(x_val)
+                        
+                        for i, label in enumerate(curve_labels):
+                            y_val = float(values[i + 1])
+                            curves[label].append(y_val)
+                    except ValueError:
+                        continue
+            
+            return {
+                'x_values': x_values,
+                'curves': curves,
+                'x_label': x_label
+            }
+            
+        except Exception as e:
+            print(f"解析CSV数据失败: {e}")
+            return None
+    
     def process_message(self, message):
-        """处理来自后端的消息 - 步骤分离版本"""
+        """处理来自后端的消息 - 步骤分离版本，支持output多曲线"""
         try:
             msg_type = message.get("type")
             self.debug_label.setText(f"Received: {msg_type}")
@@ -284,12 +341,13 @@ class RealtimePlotWidget(QWidget):
             if msg_type == "test_data":
                 # 获取原始数据
                 hex_data = message.get("data", "")
-                if not hex_data:
+                csv_data = message.get("csv_data", "")  # 新增：获取CSV数据
+                
+                if not hex_data and not csv_data:
                     return
                     
                 # 获取步骤类型和索引
                 step_type = message.get("step_type", "")
-                mode = 'transient' if step_type == 'transient' else 'transfer'
                 
                 # 获取工作流信息
                 workflow_info = message.get("workflow_info", {})
@@ -303,60 +361,31 @@ class RealtimePlotWidget(QWidget):
                 if self.auto_step_reset_check.isChecked() and step_id != self.current_step_id and self.current_step_id:
                     # 步骤发生变化，重置图表
                     self.clear_data()
-                    self.debug_label.setText(f"步骤变化: {self.current_step_type} → {mode}")
+                    self.debug_label.setText(f"步骤变化: {self.current_step_type} → {step_type}")
                 
                 # 更新当前步骤信息
-                self.current_step_type = mode
+                self.current_step_type = step_type
                 self.current_step_index = step_index
                 self.current_step_id = step_id
                 
                 # 显示步骤信息
                 if path_readable:
                     self.set_path_readable(path_readable)
-                    self.step_info_label.setText(f"当前: {mode}模式 - 步骤{step_index}")
+                    self.step_info_label.setText(f"当前: {step_type}模式 - 步骤{step_index}")
                 else:
-                    self.step_info_label.setText(f"当前: {mode}模式")
+                    self.step_info_label.setText(f"当前: {step_type}模式")
                 
-                # 更新坐标轴标签 - 添加output处理
-                if mode == 'transient':
-                    self.plot_widget.setLabel('bottom', 'Time (s)')
-                    self.plot_widget.setTitle("瞬态测试 - 电流 vs 时间")
-                elif step_type == 'output':  # 新增
-                    self.plot_widget.setLabel('bottom', 'Drain Voltage (V)')
-                    self.plot_widget.setTitle("输出特性 - 电流 vs 漏压")
-                else:  # transfer
-                    self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
-                    self.plot_widget.setTitle("转移特性 - 电流 vs 栅压")
-
-                # 新增：坐标轴标签更新后，重置视图范围
-                if step_id != self.current_step_id or len(self.data_x) == 0:
-                    self.sliding_window()
-
-                # 解析数据
-                byte_data = decode_hex_to_bytes(hex_data)
-                if not byte_data:
-                    return
-                
-                # 解析新数据点
-                new_points = decode_bytes_to_data(byte_data, mode)
-                
-                # 批量添加数据点到缓冲区
-                if new_points:
-                    # 更新总接收点数
-                    self.total_received_points += len(new_points)
+                # 关键改进：根据数据类型和步骤类型选择处理方式
+                if step_type == 'output' and csv_data:
+                    # Output类型优先使用CSV数据绘制多条曲线
+                    self.process_output_csv_data(csv_data, step_id)
+                elif hex_data:
+                    # Transfer和Transient类型，或者没有CSV数据时使用hex数据
+                    self.process_traditional_data(hex_data, step_type, step_id)
+                elif csv_data:
+                    # 如果只有CSV数据但不是output类型，尝试解析为单曲线
+                    self.process_csv_as_single_curve(csv_data, step_type, step_id)
                     
-                    # 添加到临时缓冲区
-                    for point in new_points:
-                        self.new_point_buffer_x.append(point[0])
-                        self.new_point_buffer_y.append(point[1])
-                    
-                    # 更新调试信息
-                    self.debug_label.setText(f"Added {len(new_points)} points")
-                    
-                    # 如果缓冲区足够大或测试完成，立即触发更新
-                    if len(self.new_point_buffer_x) >= self.buffer_size_threshold or self.test_completed:
-                        self.update_plot()
-            
             elif msg_type == "test_progress":
                 progress = abs(message.get("progress", 0) * 100)
                 if progress >= 100:
@@ -373,53 +402,225 @@ class RealtimePlotWidget(QWidget):
             print(f"Error processing message: {str(e)}")
             traceback.print_exc()
     
+    def process_csv_as_single_curve(self, csv_data, step_type, step_id):
+        """处理CSV数据作为单曲线（用于transfer/transient类型）"""
+        try:
+            from qt_app.utils.decoder import parse_csv_data
+            
+            parsed_data = parse_csv_data(csv_data)
+            if not parsed_data:
+                return
+                
+            x_values = parsed_data['x_values']
+            curves = parsed_data['curves']
+            
+            # 只使用第一条曲线作为单曲线数据
+            if curves:
+                first_curve_name = list(curves.keys())[0]
+                y_values = curves[first_curve_name]
+                
+                # 更新坐标轴标签
+                if step_type == 'transient':
+                    self.plot_widget.setLabel('bottom', 'Time (s)')
+                    self.plot_widget.setTitle("瞬态测试 - 电流 vs 时间")
+                else:  # transfer
+                    self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
+                    self.plot_widget.setTitle("转移特性 - 电流 vs 栅压")
+                
+                # 确保有默认曲线
+                default_curve = "Current"
+                if default_curve not in self.plot_lines:
+                    line = self.plot_widget.plot([], [], 
+                                               pen=pg.mkPen(color='b', width=2),
+                                               name=default_curve)
+                    self.plot_lines[default_curve] = line
+                    
+                if default_curve not in self.data_y_dict:
+                    self.data_y_dict[default_curve] = np.array([])
+                    
+                if default_curve not in self.new_point_buffer_y_dict:
+                    self.new_point_buffer_y_dict[default_curve] = []
+                
+                # 添加数据点到缓冲区
+                for i, x_val in enumerate(x_values):
+                    if i < len(y_values):
+                        self.new_point_buffer_x.append(x_val)
+                        self.new_point_buffer_y_dict[default_curve].append(y_values[i])
+                
+                # 更新统计
+                self.total_received_points += len(x_values)
+                self.debug_label.setText(f"Added {len(x_values)} CSV points as single curve")
+                
+        except Exception as e:
+            print(f"处理CSV单曲线数据失败: {e}")
+    
+    def process_output_csv_data(self, csv_data, step_id):
+        """处理output类型的CSV数据"""
+        try:
+            from qt_app.utils.decoder import parse_csv_data
+            
+            # 解析CSV数据
+            parsed_data = parse_csv_data(csv_data)
+            if not parsed_data:
+                return
+                
+            x_values = parsed_data['x_values']
+            curves = parsed_data['curves']
+            x_label = parsed_data['x_label']
+            
+            # 更新坐标轴标签
+            self.plot_widget.setLabel('bottom', f'{x_label} (V)')
+            self.plot_widget.setTitle("输出特性 - 电流 vs 漏压")
+            
+            # 存储栅极电压列表用于图例
+            self.current_gate_voltages = list(curves.keys())
+            
+            # 确保有对应的曲线和缓冲区
+            for curve_name in curves.keys():
+                if curve_name not in self.plot_lines:
+                    # 创建新的绘图曲线
+                    colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k']
+                    color_idx = len(self.plot_lines) % len(colors)
+                    
+                    line = self.plot_widget.plot([], [], 
+                                               pen=pg.mkPen(color=colors[color_idx], width=2),
+                                               name=curve_name)
+                    self.plot_lines[curve_name] = line
+                    
+                if curve_name not in self.data_y_dict:
+                    self.data_y_dict[curve_name] = np.array([])
+                    
+                if curve_name not in self.new_point_buffer_y_dict:
+                    self.new_point_buffer_y_dict[curve_name] = []
+            
+            # 添加新数据点到缓冲区
+            for i, x_val in enumerate(x_values):
+                # 检查x值是否已存在（避免重复添加相同的x值）
+                if len(self.new_point_buffer_x) > 0 and abs(self.new_point_buffer_x[-1] - x_val) < 1e-6:
+                    continue
+                    
+                self.new_point_buffer_x.append(x_val)
+                
+                # 添加各条曲线的y值
+                for curve_name, y_values in curves.items():
+                    if i < len(y_values):
+                        self.new_point_buffer_y_dict[curve_name].append(y_values[i])
+            
+            # 更新统计
+            self.total_received_points += len(x_values)
+            self.debug_label.setText(f"Added {len(x_values)} output points ({len(curves)} curves)")
+            
+        except Exception as e:
+            print(f"处理output CSV数据失败: {e}")
+            traceback.print_exc()
+    
+    def process_traditional_data(self, hex_data, step_type, step_id):
+        """处理传统的hex数据（transfer和transient）"""
+        if not hex_data:
+            return
+            
+        # 更新坐标轴标签
+        if step_type == 'transient':
+            self.plot_widget.setLabel('bottom', 'Time (s)')
+            self.plot_widget.setTitle("瞬态测试 - 电流 vs 时间")
+            mode = 'transient'
+        else:  # transfer
+            self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
+            self.plot_widget.setTitle("转移特性 - 电流 vs 栅压")
+            mode = 'transfer'
+        
+        # 确保有默认曲线
+        default_curve = "Current"
+        if default_curve not in self.plot_lines:
+            line = self.plot_widget.plot([], [], 
+                                       pen=pg.mkPen(color='b', width=2),
+                                       name=default_curve)
+            self.plot_lines[default_curve] = line
+            
+        if default_curve not in self.data_y_dict:
+            self.data_y_dict[default_curve] = np.array([])
+            
+        if default_curve not in self.new_point_buffer_y_dict:
+            self.new_point_buffer_y_dict[default_curve] = []
+        
+        # 解析数据
+        byte_data = decode_hex_to_bytes(hex_data)
+        if not byte_data:
+            return
+        
+        # 解析新数据点
+        new_points = decode_bytes_to_data(byte_data, mode)
+        
+        # 批量添加数据点到缓冲区
+        if new_points:
+            # 更新总接收点数
+            self.total_received_points += len(new_points)
+            
+            # 添加到临时缓冲区
+            for point in new_points:
+                self.new_point_buffer_x.append(point[0])
+                self.new_point_buffer_y_dict[default_curve].append(point[1])
+            
+            # 更新调试信息
+            self.debug_label.setText(f"Added {len(new_points)} points")
+    
     def update_plot(self):
-        """更新图表绘图 - 步骤分离版本"""
+        """更新图表绘图 - 支持多曲线"""
         # 检查是否有新数据
         if not self.new_point_buffer_x:
             return
             
         # 使用NumPy高效连接数组
         buffer_x = np.array(self.new_point_buffer_x)
-        buffer_y = np.array(self.new_point_buffer_y)
         
         # 如果是新图表，直接设置数据
         if self.data_x.size == 0:
             self.data_x = buffer_x
-            self.data_y = buffer_y
-            # # 新增：新数据时确保自动范围
-            # self.sliding_window()
+            for curve_name, buffer_y in self.new_point_buffer_y_dict.items():
+                if buffer_y:  # 确保有数据
+                    self.data_y_dict[curve_name] = np.array(buffer_y)
             self.plot_widget.enableAutoRange(x=True, y=True)
         else:
             # 连接到现有数组
             self.data_x = np.append(self.data_x, buffer_x)
-            self.data_y = np.append(self.data_y, buffer_y)
+            for curve_name, buffer_y in self.new_point_buffer_y_dict.items():
+                if buffer_y and curve_name in self.data_y_dict:  # 确保有数据且曲线存在
+                    self.data_y_dict[curve_name] = np.append(self.data_y_dict[curve_name], buffer_y)
         
         # 内存保护：使用环形缓冲区
         if self.use_circular_buffer and len(self.data_x) > self.MAX_POINTS:
             # 只保留最新的MAX_POINTS个点
             self.data_x = self.data_x[-self.MAX_POINTS:]
-            self.data_y = self.data_y[-self.MAX_POINTS:]
+            for curve_name in self.data_y_dict:
+                self.data_y_dict[curve_name] = self.data_y_dict[curve_name][-self.MAX_POINTS:]
         
         # 清空缓冲区
         self.new_point_buffer_x = []
-        self.new_point_buffer_y = []
+        self.new_point_buffer_y_dict = {key: [] for key in self.new_point_buffer_y_dict}
         
         # 数据量很大时自动隐藏符号
         total_points = self.data_x.size
         point_symbols_enabled = self.symbol_check.isChecked()
         
-        if total_points > 1000 and not point_symbols_enabled:
-            self.plot_line.setSymbol(None)
-        elif point_symbols_enabled:
-            self.plot_line.setSymbol('o') 
-            self.plot_line.setSymbolSize(4)
-        
-        # 更新图表数据 - 显示所有保留的点
-        self.plot_line.setData(self.data_x, self.data_y)
+        # 更新所有曲线的图表数据
+        for curve_name, line in self.plot_lines.items():
+            if curve_name in self.data_y_dict and len(self.data_y_dict[curve_name]) > 0:
+                # 确保x和y数据长度匹配
+                y_data = self.data_y_dict[curve_name]
+                min_len = min(len(self.data_x), len(y_data))
+                
+                line.setData(self.data_x[:min_len], y_data[:min_len])
+                
+                # 设置符号
+                if total_points > 1000 and not point_symbols_enabled:
+                    line.setSymbol(None)
+                elif point_symbols_enabled:
+                    line.setSymbol('o') 
+                    line.setSymbolSize(4)
         
         # 滚动窗口支持
         self.sliding_window()
+        
         # 更新数据计数 - 显示保留点数和总接收点数
         if self.use_circular_buffer and self.total_received_points > self.MAX_POINTS:
             # 显示已被丢弃的数据点信息
@@ -428,6 +629,7 @@ class RealtimePlotWidget(QWidget):
             )
         else:
             self.data_count_label.setText(f"Points: {total_points}")
+    
     def sliding_window(self):
         if self.current_step_type == 'transient' and self.auto_scrolling_enabled:
             if len(self.data_x) > 1:
@@ -439,6 +641,7 @@ class RealtimePlotWidget(QWidget):
         else:
             # 其他图表类型自动调整范围
             self.plot_widget.enableAutoRange(x=True, y=True)
+    
     def start_new_test(self, test_id):
         """开始新的测试"""
         self.test_id = test_id
@@ -447,13 +650,20 @@ class RealtimePlotWidget(QWidget):
         # 重置步骤跟踪
         self.current_step_index = -1
         self.current_step_id = ""
+        self.current_gate_voltages = []
         
         # 重置数据
         self.data_x = np.array([])
-        self.data_y = np.array([])
+        self.data_y_dict = {}
         self.new_point_buffer_x = []
-        self.new_point_buffer_y = []
+        self.new_point_buffer_y_dict = {}
         self.total_received_points = 0
+        
+        # 清除图例和曲线
+        self.legend.clear()
+        for line in self.plot_lines.values():
+            self.plot_widget.removeItem(line)
+        self.plot_lines = {}
         
         self.update_status_label()
         self.step_info_label.setText("等待数据...")

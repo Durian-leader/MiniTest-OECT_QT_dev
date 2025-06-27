@@ -104,7 +104,7 @@ class CustomTestItemDelegate(QStyledItemDelegate):
 
 class TestHistoryWidget(QWidget):
     """
-    Widget for viewing and analyzing historical test data
+    Widget for viewing and analyzing historical test data - 支持output多曲线显示
     """
     
     def __init__(self, backend):
@@ -121,6 +121,10 @@ class TestHistoryWidget(QWidget):
         self.tests = []
         self.test_info = {}
         self.step_data = []
+        self.step_data_dict = {}  # 新增：支持多曲线数据存储
+        
+        # Plot lines for multiple curves
+        self.plot_lines = {}
         
         # Setup UI
         self.setup_ui()
@@ -244,6 +248,9 @@ class TestHistoryWidget(QWidget):
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground('w')
         self.plot_widget.showGrid(x=True, y=True)
+        
+        # 添加图例
+        self.legend = self.plot_widget.addLegend()
 
         # 添加文本显示项
         self.coord_label = pg.TextItem(text="", anchor=(0, 1), color=(50, 50, 50), fill=(200, 200, 200, 150))
@@ -263,9 +270,6 @@ class TestHistoryWidget(QWidget):
             size=10, brush=pg.mkBrush(255, 0, 0, 200), pen=None, symbol='o'
         )
         self.plot_widget.addItem(self.highlight_point)
-
-        # 创建绘图线
-        self.plot_line = self.plot_widget.plot([], [], pen=pg.mkPen(color='b', width=2))
 
         # 添加鼠标移动事件处理
         self.plot_widget.scene().sigMouseMoved.connect(self.on_mouse_moved)
@@ -671,17 +675,18 @@ class TestHistoryWidget(QWidget):
                 source = params.get("sourceVoltage", 0) / 1000.0
                 cycles = params.get("cycles", 0)
                 params_text = f"Vg: {gate_bottom} → {gate_top}V, Vd: {drain}V, Vs: {source}V, 循环: {cycles}"
-            elif step_type == "output":  # 在refresh_step_list方法中
+                
+            elif step_type == "output":  # 修改：正确显示output参数
                 gate_voltages = params.get("gateVoltageList", [0])
                 if isinstance(gate_voltages, list):
-                    gate_text = f"{min(gate_voltages)}-{max(gate_voltages)}V ({len(gate_voltages)}条)"
+                    gate_text = f"{min(gate_voltages)/1000.0:.3f}-{max(gate_voltages)/1000.0:.3f}V ({len(gate_voltages)}条)"
                 else:
-                    gate_text = f"{gate_voltages/1000.0}V"
+                    gate_text = f"{gate_voltages/1000.0:.3f}V"
                 
                 drain_start = params.get("drainVoltageStart", 0) / 1000.0
                 drain_end = params.get("drainVoltageEnd", 0) / 1000.0
                 source = params.get("sourceVoltage", 0) / 1000.0
-                params_text = f"Vd: {drain_start} → {drain_end}V, Vg: {gate_text}, Vs: {source}V"
+                params_text = f"Vd: {drain_start:.3f} → {drain_end:.3f}V, Vg: {gate_text}, Vs: {source:.3f}V"
 
             item.setText(2, params_text)
             
@@ -762,13 +767,23 @@ class TestHistoryWidget(QWidget):
             cycle_time = params.get('bottomTime', 0) + params.get('topTime', 0)
             total_time = cycle_time * params.get('cycles', 0)
             self.add_param_label("总测试时间", f"{total_time} ms ({total_time/1000:.1f} s)")
-        elif step_type == "output":  # 新增
+            
+        elif step_type == "output":  # 修改：正确显示output参数
             self.add_param_label("是否回扫", "是" if params.get("isSweep") == 1 else "否")
             self.add_param_label("时间步长", f"{params.get('timeStep', 0)} ms")
             
             # Add voltages with consistent formatting and highlighting
             self.add_voltage_param("源电压 (Vs)", params.get('sourceVoltage', 0))
-            self.add_voltage_param("栅电压 (Vg)", params.get('gateVoltage', 0))
+            
+            # 显示栅极电压列表
+            gate_voltages = params.get("gateVoltageList", [0])
+            if isinstance(gate_voltages, list):
+                gate_voltage_text = ", ".join([f"{v} mV" for v in gate_voltages])
+                self.add_param_label("栅极电压列表", gate_voltage_text)
+                self.add_param_label("输出特性曲线数", f"{len(gate_voltages)} 条")
+            else:
+                self.add_voltage_param("栅极电压", gate_voltages)
+            
             self.add_voltage_param("漏压起点 (Vd start)", params.get('drainVoltageStart', 0))
             self.add_voltage_param("漏压终点 (Vd end)", params.get('drainVoltageEnd', 0))
             self.add_voltage_param("漏压步长 (Vd step)", params.get('drainVoltageStep', 0))
@@ -778,7 +793,8 @@ class TestHistoryWidget(QWidget):
             step_size = params.get('drainVoltageStep', 0)
             if step_size > 0:
                 num_points = drain_span / step_size + 1
-                self.add_param_label("理论数据点数", f"{int(num_points)}")
+                self.add_param_label("每条曲线数据点数", f"{int(num_points)}")
+    
     def add_param_label(self, name, value):
         """Add a parameter label to the form"""
         label = QLabel(str(value))
@@ -792,9 +808,12 @@ class TestHistoryWidget(QWidget):
         label.setStyleSheet("color: #0066cc; font-weight: bold;")
         self.step_params_layout.addRow(name + ":", label)
     
-    def update_data_stats(self, file_name, data_count):
+    def update_data_stats(self, file_name, data_count, curve_count=1):
         """Update data statistics in the details tab"""
-        self.data_points_label.setText(str(data_count))
+        if curve_count > 1:
+            self.data_points_label.setText(f"{data_count} 点/曲线 × {curve_count} 曲线")
+        else:
+            self.data_points_label.setText(str(data_count))
         self.data_file_label.setText(file_name)
     
     def clear_details(self):
@@ -823,7 +842,7 @@ class TestHistoryWidget(QWidget):
             self.step_params_layout.removeRow(0)
     
     def load_step_data(self, step_index):
-        """Load data for selected step"""
+        """Load data for selected step - 支持output多曲线"""
         if not self.test_info or self.test_info.get("status") != "ok":
             return
         
@@ -841,6 +860,7 @@ class TestHistoryWidget(QWidget):
             
             if not data_file:
                 self.step_data = []
+                self.step_data_dict = {}
                 self.clear_plot()
                 return
             
@@ -855,27 +875,27 @@ class TestHistoryWidget(QWidget):
             # Load CSV data
             with open(file_path, "r") as f:
                 reader = csv.reader(f)
-                # Skip header
+                # Get header
                 header = next(reader)
                 
-                # Read data
-                data = []
-                for row in reader:
-                    try:
-                        x = float(row[0])
-                        y = float(row[1])
-                        data.append([x, y])
-                    except:
-                        pass
-            
-            # Store data
-            self.step_data = data
+                # Parse data based on step type
+                if step_type == "output":
+                    # Output type: multiple columns for different gate voltages
+                    self.load_output_data(reader, header)
+                else:
+                    # Transfer/Transient type: traditional two-column data
+                    self.load_traditional_data(reader, header)
             
             # Update plot
             self.update_plot(step_type)
             
             # Update data stats
-            self.update_data_stats(data_file, len(data))
+            if step_type == "output":
+                curve_count = len(self.step_data_dict)
+                point_count = len(next(iter(self.step_data_dict.values()))) if self.step_data_dict else 0
+                self.update_data_stats(data_file, point_count, curve_count)
+            else:
+                self.update_data_stats(data_file, len(self.step_data))
             
             # Update step params
             self.update_step_params(step)
@@ -883,12 +903,98 @@ class TestHistoryWidget(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"加载步骤数据失败: {str(e)}")
     
-    def update_plot(self, step_type):
-        """Update plot with loaded data"""
-        if not self.step_data:
-            self.clear_plot()
-            return
+    def load_output_data(self, reader, header):
+        """加载output类型的多曲线数据"""
+        # 第一列是x轴数据（通常是Vd）
+        x_label = header[0]
+        curve_labels = header[1:]  # 后续列是各条曲线
         
+        # 初始化数据结构
+        x_values = []
+        curves_data = {label: [] for label in curve_labels}
+        
+        # 读取数据
+        for row in reader:
+            if len(row) == len(header):
+                try:
+                    x_val = float(row[0])
+                    x_values.append(x_val)
+                    
+                    for i, label in enumerate(curve_labels):
+                        y_val = float(row[i + 1])
+                        curves_data[label].append(y_val)
+                except ValueError:
+                    continue
+        
+        # 存储数据
+        self.step_data = [[x, curves_data[curve_labels[0]][i]] for i, x in enumerate(x_values)]  # 保持兼容性
+        self.step_data_dict = {
+            'x_values': x_values,
+            'curves': curves_data,
+            'x_label': x_label
+        }
+    
+    def load_traditional_data(self, reader, header):
+        """加载传统的两列数据"""
+        data = []
+        for row in reader:
+            try:
+                x = float(row[0])
+                y = float(row[1])
+                data.append([x, y])
+            except:
+                pass
+        
+        self.step_data = data
+        self.step_data_dict = {}
+    
+    def update_plot(self, step_type):
+        """Update plot with loaded data - 支持多曲线"""
+        # 清除现有图例和曲线
+        self.legend.clear()
+        for line in self.plot_lines.values():
+            self.plot_widget.removeItem(line)
+        self.plot_lines = {}
+        
+        if step_type == "output" and self.step_data_dict:
+            # 绘制output多曲线
+            self.plot_output_curves()
+        elif self.step_data:
+            # 绘制单曲线
+            self.plot_single_curve(step_type)
+        else:
+            self.clear_plot()
+    
+    def plot_output_curves(self):
+        """绘制output类型的多条曲线"""
+        x_values = self.step_data_dict['x_values']
+        curves = self.step_data_dict['curves']
+        x_label = self.step_data_dict['x_label']
+        
+        # 设置坐标轴标签
+        self.plot_widget.setLabel('bottom', f'{x_label} (V)')
+        self.plot_widget.setLabel('left', 'Current (A)')
+        self.plot_widget.setTitle('输出特性曲线')
+        
+        # 绘制每条曲线
+        colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k', 'orange', 'purple', 'brown']
+        
+        for i, (curve_name, y_values) in enumerate(curves.items()):
+            if len(y_values) == len(x_values):
+                color = colors[i % len(colors)]
+                line = self.plot_widget.plot(x_values, y_values, 
+                                           pen=pg.mkPen(color=color, width=2),
+                                           name=curve_name)
+                self.plot_lines[curve_name] = line
+        
+        # 隐藏鼠标追踪相关的辅助线
+        self.vLine.hide()
+        self.hLine.hide()
+        self.coord_label.hide()
+        self.highlight_point.clear()
+    
+    def plot_single_curve(self, step_type):
+        """绘制单条曲线（transfer或transient）"""
         # Extract x and y values
         x = [point[0] for point in self.step_data]
         y = [point[1] for point in self.step_data]
@@ -897,20 +1003,17 @@ class TestHistoryWidget(QWidget):
         if step_type == "transfer":
             self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
             self.plot_widget.setLabel('left', 'Current (A)')
-            # Set title
             self.plot_widget.setTitle('转移特性曲线')
-
-        elif step_type == "output":  # 新增
-            self.plot_widget.setLabel('bottom', 'Drain Voltage (V)')
-            self.plot_widget.setLabel('left', 'Current (A)')
-            self.plot_widget.setTitle('输出特性曲线')
         else:  # transient
             self.plot_widget.setLabel('bottom', 'Time (s)')
             self.plot_widget.setLabel('left', 'Current (A)')
-            # Set title
             self.plot_widget.setTitle('瞬态响应曲线')
-        # Update plot line
-        self.plot_line.setData(x, y)
+        
+        # 创建并绘制曲线
+        line = self.plot_widget.plot(x, y, 
+                                   pen=pg.mkPen(color='b', width=2),
+                                   name="Current")
+        self.plot_lines["Current"] = line
         
         # 隐藏辅助线和标签
         self.vLine.hide()
@@ -920,7 +1023,12 @@ class TestHistoryWidget(QWidget):
     
     def clear_plot(self):
         """Clear the plot"""
-        self.plot_line.setData([], [])
+        # 清除图例和曲线
+        self.legend.clear()
+        for line in self.plot_lines.values():
+            self.plot_widget.removeItem(line)
+        self.plot_lines = {}
+        
         self.plot_widget.setTitle('')
         # 隐藏辅助线和标签
         self.vLine.hide()
@@ -984,8 +1092,13 @@ class TestHistoryWidget(QWidget):
         self.load_step_data(step_index)
 
     def on_mouse_moved(self, pos):
-        """处理鼠标在图表上移动的事件"""
-        if not self.step_data or len(self.step_data) == 0:
+        """处理鼠标在图表上移动的事件 - 仅对单曲线有效"""
+        # 仅对单曲线图表启用鼠标追踪
+        if len(self.plot_lines) != 1 or not self.step_data:
+            self.vLine.hide()
+            self.hLine.hide()
+            self.coord_label.hide()
+            self.highlight_point.clear()
             return
             
         # 获取鼠标在绘图项中的位置
@@ -1037,13 +1150,6 @@ class TestHistoryWidget(QWidget):
             self.highlight_point.clear()
             return
         
-        # # 判断当前显示的数据类型
-        # step_type = "transfer" if self.plot_widget.getPlotItem().getTitle() == '转移特性曲线' else "transient"
-        
-        # # 格式化显示的文本，根据步骤类型
-        # if step_type == "transfer":
-        #     text = f"电压: {nearest_x:.3f} V\n电流: {nearest_y:.3e} A"
-        # else:  # transient
         text = f"x: {nearest_x:.3f}\ny: {nearest_y:.3e}"
         
         # 设置文本位置和内容
