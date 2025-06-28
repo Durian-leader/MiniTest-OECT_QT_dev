@@ -4,7 +4,7 @@ OECT测试系统后端 - 多进程架构版本
 """
 
 import os
-import logging
+
 import multiprocessing as mp
 import time
 import json
@@ -12,18 +12,10 @@ import uuid
 import signal
 import sys
 from typing import Dict, List, Any, Optional, Tuple
-if not os.path.exists("logs"):
-    os.makedirs("logs", exist_ok=True)
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('logs/backend.log')
-    ]
-)
-logger = logging.getLogger(__name__)
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 # 消息类型常量
 MSG_START_TEST = "start_test"
@@ -74,7 +66,6 @@ class MedicalTestBackend:
         self.is_running = False
         
         # 创建必要目录
-        os.makedirs("logs", exist_ok=True)
         os.makedirs("UserData/AutoSave", exist_ok=True)
     
     def start(self):

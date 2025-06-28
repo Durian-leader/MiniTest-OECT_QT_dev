@@ -5,7 +5,6 @@
 """
 
 import os
-import logging
 import multiprocessing as mp
 import queue
 import time
@@ -19,8 +18,10 @@ import serial.tools.list_ports
 import serial_asyncio
 from datetime import datetime
 
-# 创建logger对象
-logger = logging.getLogger(__name__)
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 # 导入测试相关模块
 from backend_device_control_pyqt.core.command_gen import gen_transfer_cmd, gen_transient_cmd
@@ -1087,7 +1088,7 @@ def initialize_test_step_classes(data_bridge):
             if (buffer['step_info'] and 
                 buffer['step_info'].get('step_index', 0) != current_step_index):
                 
-                print(f"检测到步骤变化: {buffer['step_info'].get('step_index')} -> {current_step_index}")
+                logger.info(f"检测到步骤变化: {buffer['step_info'].get('step_index')} -> {current_step_index}")
                 self.flush_all_buffers_for_test(test_id)
             
             # 添加数据
@@ -1418,17 +1419,6 @@ def run_test_process(command_queue, result_queue, data_queue, ready_event, shutd
         ready_event: 进程就绪事件
         shutdown_event: 关闭事件
     """
-    # 设置日志
-    os.makedirs("logs", exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('logs/test_process.log')
-        ]
-    )
-    logger = logging.getLogger('TestProcess')
     
     # 设置信号处理
     def signal_handler(sig, frame):

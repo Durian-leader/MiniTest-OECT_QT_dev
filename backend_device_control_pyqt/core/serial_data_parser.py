@@ -1,6 +1,11 @@
 import numpy as np
 import struct
 
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
+
 def ADS_CalVoltage(data):
     """将 24-bit 原始 ADC 数据转换为电压值"""
     if data & 0x00800000:  # 最高位为1，表示负数
@@ -46,7 +51,7 @@ def bytes_to_numpy(byte_data, mode='transient'):
     if complete_bytes < len(byte_data):
         # 记录丢弃的字节数
         discarded_bytes = len(byte_data) - complete_bytes
-        print(f"警告: 丢弃 {discarded_bytes} 字节不完整的数据包")
+        logger.warning(f"警告: 丢弃 {discarded_bytes} 字节不完整的数据包")
         # 截取完整的部分
         byte_data = byte_data[:complete_bytes]
     

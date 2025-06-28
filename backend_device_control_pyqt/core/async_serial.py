@@ -1,23 +1,16 @@
 import asyncio
 import serial_asyncio
-import logging
 from typing import Dict, Optional, Callable, Tuple, Any, Union
 import time
 
 # 添加停止命令常量
 STOP_COMMAND = "FF030100FE"
 
-# 配置logger - 修复日志重复问题
-logger = logging.getLogger(__name__)
-# 检查是否已有处理器，避免重复添加
-if not logger.handlers:
-    logger.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    # 避免日志传播到根日志器，防止重复
-    logger.propagate = False
+
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 class AsyncSerialDevice:
     """异步串口设备类，负责单个设备的通信"""

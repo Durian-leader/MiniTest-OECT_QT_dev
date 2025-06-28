@@ -5,7 +5,6 @@
 """
 
 import os
-import logging
 import multiprocessing as mp
 import queue
 import time
@@ -16,16 +15,10 @@ import threading
 from typing import Dict, Any, Optional, List, Union, Tuple
 import numpy as np
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('logs/data_transmission.log')
-    ]
-)
-logger = logging.getLogger('DataTransmissionProcess')
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 # 消息类型常量
 MSG_TEST_DATA = "test_data"
@@ -442,19 +435,6 @@ def run_data_transmission_process(test_queue, qt_queue, save_queue, save_result_
         ready_event: 进程就绪事件
         shutdown_event: 关闭事件
     """
-    # 确保日志目录存在
-    os.makedirs("logs", exist_ok=True)
-    
-    # 设置日志
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('logs/data_transmission.log')
-        ]
-    )
-    logger = logging.getLogger('DataTransmissionProcess')
     
     # 设置信号处理
     def signal_handler(sig, frame):

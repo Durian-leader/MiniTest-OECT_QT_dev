@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import asyncio
-import logging
 from typing import Dict, Any, Tuple, Optional, Callable, List
 from datetime import datetime
 import json
@@ -9,8 +8,10 @@ from backend_device_control_pyqt.core.async_serial import AsyncSerialDevice
 # 使用新的数据桥接器
 from backend_device_control_pyqt.comunication.data_bridge import data_bridge
 
-# 正确的日志设置
-logger = logging.getLogger(__name__)
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 def bytes_to_hex(data) -> str:
     """Convert byte data to hex string"""

@@ -11,9 +11,11 @@ from PyQt5.QtGui import QIcon, QColor, QBrush, QFont
 
 from qt_app.widgets.workflow_editor import WorkflowEditorWidget
 from qt_app.widgets.realtime_plot import RealtimePlotWidget
-import logging
-# 日志
-logger = logging.getLogger(__name__)
+
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 class DeviceItemDelegate(QStyledItemDelegate):
     """Custom delegate for rendering device list items"""

@@ -7,6 +7,10 @@ from PyQt5.QtGui import QFont, QColor
 import pyqtgraph as pg
 from qt_app.utils.decoder import decode_hex_to_bytes, decode_bytes_to_data
 
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 class RealtimePlotWidget(QWidget):
     """
     Widget for displaying real-time test data with sliding window
@@ -273,7 +277,7 @@ class RealtimePlotWidget(QWidget):
         
         # 关键修复：重置视图范围，启用自动范围调整
         self.plot_widget.enableAutoRange(x=True, y=True)
-        print(f"重置绘图对象并启用自动范围调整: {step_type}")
+        logger.info(f"重置绘图对象并启用自动范围调整: {step_type}")
     
     def update_status_label(self):
         """Update the status label with current info"""
@@ -352,7 +356,7 @@ class RealtimePlotWidget(QWidget):
                     
                     return "start", output_metadata, ""
             except (ValueError, IndexError) as e:
-                print(f"解析output开始信号失败: {e}")
+                logger.error(f"解析output开始信号失败: {e}")
         
         # 检查output数据元数据
         elif hex_data.startswith("OUTPUT_META:"):
@@ -373,7 +377,7 @@ class RealtimePlotWidget(QWidget):
                     
                     return "data", output_metadata, actual_hex_data
             except (ValueError, IndexError) as e:
-                print(f"解析output元数据失败: {e}")
+                logger.error(f"解析output元数据失败: {e}")
         
         return None, None, hex_data
     
@@ -402,14 +406,14 @@ class RealtimePlotWidget(QWidget):
             # 关键修复：创建第一条output曲线时启用自动范围调整
             if len(self.plot_lines) == 1:
                 self.plot_widget.enableAutoRange(x=True, y=True)
-                print(f"创建第一条output曲线，启用自动范围调整")
+                logger.info(f"创建第一条output曲线，启用自动范围调整")
             
-            print(f"为栅极电压 {gate_voltage}mV 创建曲线: {curve_name}")
+            logger.info(f"为栅极电压 {gate_voltage}mV 创建曲线: {curve_name}")
     
     def flush_output_data_buffer(self):
         """处理缓冲的output数据"""
         if self.output_data_buffer:
-            print(f"处理缓冲的output数据: {len(self.output_data_buffer)} 条")
+            logger.info(f"处理缓冲的output数据: {len(self.output_data_buffer)} 条")
             
             for hex_data, output_metadata in self.output_data_buffer:
                 self.process_output_realtime_data_immediate(hex_data, output_metadata)
@@ -445,7 +449,7 @@ class RealtimePlotWidget(QWidget):
                               self.current_step_id)
                 
                 if step_changed:
-                    print(f"步骤变化检测: {self.current_step_type} → {step_type}")
+                    logger.info(f"步骤变化检测: {self.current_step_type} → {step_type}")
                     # 完全清除数据
                     self.clear_data()
                     # 重置绘图对象
@@ -486,7 +490,7 @@ class RealtimePlotWidget(QWidget):
         
         except Exception as e:
             self.debug_label.setText(f"Error: {str(e)}")
-            print(f"Error processing message: {str(e)}")
+            logger.error(f"Error processing message: {str(e)}")
             traceback.print_exc()
     
     def process_traditional_step(self, hex_data, step_type):
@@ -544,7 +548,7 @@ class RealtimePlotWidget(QWidget):
         # 只在第一次进入output步骤时触发
         if not self.plot_lines and not self.output_curves_data:
             self.plot_widget.enableAutoRange(x=True, y=True)
-            print("首次进入output步骤，启用自动范围调整")
+            logger.info("首次进入output步骤，启用自动范围调整")
         
         # 解析output元数据
         signal_type, output_metadata, clean_hex_data = self.parse_output_metadata(hex_data)
@@ -575,7 +579,7 @@ class RealtimePlotWidget(QWidget):
         # 检查曲线是否已准备好
         if curve_name not in self.plot_lines or curve_name not in self.output_curves_data:
             # 曲线还没准备好，缓存数据
-            print(f"曲线 {curve_name} 还没准备好，缓存数据")
+            logger.info(f"曲线 {curve_name} 还没准备好，缓存数据")
             self.output_data_buffer.append((hex_data, output_metadata))
             
             # 立即准备曲线
@@ -637,7 +641,7 @@ class RealtimePlotWidget(QWidget):
             curve_count = len(self.output_curves_data)
             self.data_count_label.setText(f"显示: {total_points} 点 ({curve_count} 曲线)")
             
-            print(f"添加 {len(new_points)} 个数据点到 {curve_name}")
+            logger.info(f"添加 {len(new_points)} 个数据点到 {curve_name}")
     
     def process_output_fallback(self, hex_data):
         """处理output的向后兼容模式（单曲线）"""

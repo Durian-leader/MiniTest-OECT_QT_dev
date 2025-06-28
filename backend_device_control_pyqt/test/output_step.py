@@ -4,9 +4,10 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 import numpy as np
 import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 class OutputStep(TestStep):
     """Output characteristics test step with multiple gate voltages support"""

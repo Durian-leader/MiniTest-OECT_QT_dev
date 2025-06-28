@@ -1,10 +1,14 @@
 # run_qt.py
 import os
 import sys
-import logging
 import multiprocessing as mp
-
-logging.basicConfig(level=logging.DEBUG)      # 全局日志控制
+import logging
+from logger_config import log_manager, get_module_logger
+log_manager.set_levels(
+    file_level=logging.WARNING,    # 文件记录详细信息
+    console_level=logging.WARNING   # 控制台只显示重要信息
+)
+logger = get_module_logger()
 
 def _setup_qt_plugin_path() -> None:
     """确保打包后 Qt 找得到 platform plugins。"""

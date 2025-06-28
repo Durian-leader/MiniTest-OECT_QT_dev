@@ -7,9 +7,11 @@ Converts hex strings to bytes and parses them into usable data
 import sys
 import traceback
 import numpy as np
-# 日志记录器
-import logging
-logger = logging.getLogger(__name__)
+
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 def ads_cal_voltage(data):
     """

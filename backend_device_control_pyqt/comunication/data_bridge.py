@@ -3,14 +3,16 @@
 用于替代原来的WebSocket通信，直接通过队列传递数据
 """
 
-import logging
+
 import json
 import asyncio
 from typing import Dict, Any, Optional
 from queue import Queue  # Import Queue from queue module instead
 
-# 设置日志
-logger = logging.getLogger(__name__)
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 # 数据队列
 data_queue = None

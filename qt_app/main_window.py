@@ -1,6 +1,6 @@
 import sys
 import os
-import logging
+
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, 
                            QVBoxLayout, QWidget, QSplitter, QLabel, 
                            QStatusBar, QMessageBox)
@@ -13,26 +13,10 @@ from qt_app.widgets.device_control import DeviceControlWidget
 from qt_app.widgets.test_history import TestHistoryWidget
 from backend_device_control_pyqt.main import MedicalTestBackend
 
-# Configure logging
-def setup_logging():
-    """Configure application logging"""
-    # Create logs directory if it doesn't exist
-    if not os.path.exists("logs"):
-        os.makedirs("logs", exist_ok=True)
-    
-    # Configure root logger
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('logs/app.log')
-        ]
-    )
-    
-    # Create application logger
-    logger = logging.getLogger('OECTTestApp')
-    return logger
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 class MainWindow(QMainWindow):
     """Main application window with tabbed interface"""
@@ -142,8 +126,6 @@ def exception_hook(exctype, value, traceback):
 
 def main():
     """Main application entry point"""
-    # Setup logging
-    logger = setup_logging()
     logger.info("应用程序启动")
     
     # Set exception hook

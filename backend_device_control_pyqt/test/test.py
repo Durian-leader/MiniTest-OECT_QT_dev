@@ -4,9 +4,10 @@ import asyncio
 import json
 from datetime import datetime
 import os
-import logging
-
-logger = logging.getLogger(__name__)
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 class Test:
     """Class to orchestrate a sequence of test steps"""

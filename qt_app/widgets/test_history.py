@@ -14,7 +14,10 @@ from PyQt5.QtCore import Qt, QSize, QRect
 from PyQt5.QtGui import QIcon, QColor, QFont, QPalette, QBrush
 
 import pyqtgraph as pg
-
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 class CustomTestItemDelegate(QStyledItemDelegate):
     """Custom delegate for rendering test list items with more information"""
     
@@ -567,7 +570,7 @@ class TestHistoryWidget(QWidget):
                         deleted_count += 1
                     except Exception as e:
                         failed_count += 1
-                        print(f"Error deleting test {test_id}: {str(e)}")
+                        logger.error(f"Error deleting test {test_id}: {str(e)}")
                 else:
                     failed_count += 1
             

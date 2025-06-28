@@ -3,15 +3,16 @@
 提供进程间通信的辅助函数和类
 """
 
-import logging
 import time
 import pickle
 import json
 import numpy as np
 from typing import Any, Dict, Optional, Union
 
-logger = logging.getLogger(__name__)
-
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 class IPCUtils:
     """进程间通信工具类"""
     

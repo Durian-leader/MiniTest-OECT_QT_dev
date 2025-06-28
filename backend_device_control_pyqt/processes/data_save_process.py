@@ -4,7 +4,6 @@
 """
 
 import os
-import logging
 import multiprocessing as mp
 import queue
 import time
@@ -18,16 +17,10 @@ import numpy as np
 # 导入数据解析模块
 from backend_device_control_pyqt.core.serial_data_parser import bytes_to_numpy
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('logs/data_save.log')
-    ]
-)
-logger = logging.getLogger('DataSaveProcess')
+########################### 日志设置 ###################################
+from logger_config import get_module_logger
+logger = get_module_logger() 
+#####################################################################
 
 # 消息类型常量
 MSG_SAVE_DATA = "save_data"
@@ -422,19 +415,7 @@ def run_data_save_process(data_save_queue, result_queue, ready_event, shutdown_e
         ready_event: 进程就绪事件
         shutdown_event: 关闭事件
     """
-    # 确保日志目录存在
-    os.makedirs("logs", exist_ok=True)
-    
-    # 设置日志
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler('logs/data_save.log')
-        ]
-    )
-    logger = logging.getLogger('DataSaveProcess')
+
     
     # 设置信号处理
     def signal_handler(signum, frame):
