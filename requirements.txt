@@ -7,3 +7,4 @@ logging
 
 # 用于打包
 pillow
+pyinstaller
