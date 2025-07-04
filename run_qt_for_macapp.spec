@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['run_qt_for_exe.py'],
+    ['run_qt_for_macapp.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -21,7 +21,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='run_qt_for_exe',
+    name='run_qt_for_macapp',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -41,11 +41,11 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='run_qt_for_exe',
+    name='run_qt_for_macapp',
 )
 app = BUNDLE(
     coll,
-    name='run_qt_for_exe.app',
+    name='run_qt_for_macapp.app',
     icon='my_icon.icns',
     bundle_identifier=None,
 )
