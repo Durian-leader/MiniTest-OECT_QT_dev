@@ -31,7 +31,7 @@ class RealtimePlotWidget(QWidget):
         self.current_step_id = ""
         
         # 内存安全设置
-        self.MAX_POINTS = 100000
+        self.MAX_POINTS = 10000
         self.use_circular_buffer = True
         
         # === 单曲线数据结构（用于transfer和transient）===

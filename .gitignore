@@ -5,3 +5,4 @@ logs
 dist/run_qt_for_macapp
 dist/run_qt_for_macapp.app
 .DS_Store
+.venv
