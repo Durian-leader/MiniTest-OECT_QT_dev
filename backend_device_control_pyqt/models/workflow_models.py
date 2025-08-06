@@ -61,4 +61,6 @@ class WorkflowParams(BaseModel):
     baudrate: int
     name: str = "自定义工作流"
     description: str = ""
+    chip_id: str = ""
+    device_number: str = ""
     steps: List[Union[TransferStepConfig, TransientStepConfig, OutputStepConfig, LoopConfig]]

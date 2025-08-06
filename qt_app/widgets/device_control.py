@@ -255,40 +255,60 @@ class DeviceControlWidget(QWidget):
         test_info_frame = QFrame()
         test_info_frame.setFrameShape(QFrame.StyledPanel)
         test_info_frame.setStyleSheet("background-color: #f6f6f6; border-radius: 4px; padding: 8px;")
-        test_info_layout = QFormLayout(test_info_frame)
+        test_info_layout = QVBoxLayout(test_info_frame)
+        
+        # Form layout for input fields
+        form_layout = QFormLayout()
         
         # Auto-naming checkbox
         self.auto_naming_check = QCheckBox("自动生成测试名称")
         self.auto_naming_check.setChecked(self.auto_naming)
         self.auto_naming_check.toggled.connect(self.toggle_auto_naming)
-        test_info_layout.addRow("", self.auto_naming_check)
+        form_layout.addRow("", self.auto_naming_check)
         
-        # Test name field
+        # Test name field with improved styling
         self.test_name_edit = QLineEdit()
         self.test_name_edit.setPlaceholderText("输入测试名称")
         self.test_name_edit.setEnabled(False)  # 初始化时禁用，因为默认启用自动命名
+        self.test_name_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; }")
         default_name = f"测试_{time.strftime('%Y%m%d%H%M%S')}"
         self.test_name_edit.setText(default_name)
         self.test_name_edit.textChanged.connect(self.on_test_name_changed)
-        test_info_layout.addRow("测试名称:", self.test_name_edit)
+        form_layout.addRow("测试名称:", self.test_name_edit)
         
-        # Test description field
+        # Test description field with improved styling
         self.test_desc_edit = QLineEdit()
         self.test_desc_edit.setPlaceholderText("输入测试描述（可选）")
-        test_info_layout.addRow("测试描述:", self.test_desc_edit)
+        self.test_desc_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
+        form_layout.addRow("测试描述:", self.test_desc_edit)
         
-        workflow_layout.addWidget(test_info_frame)
+        # Chip ID field with improved styling
+        self.chip_id_edit = QLineEdit()
+        self.chip_id_edit.setPlaceholderText("输入芯片ID（可选）")
+        self.chip_id_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
+        form_layout.addRow("芯片ID:", self.chip_id_edit)
         
-        # Button toolbar for workflow operations
+        # Device number field with improved styling
+        self.device_number_edit = QLineEdit()
+        self.device_number_edit.setPlaceholderText("输入器件编号（可选）")
+        self.device_number_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
+        form_layout.addRow("器件编号:", self.device_number_edit)
+        
+        # Add form layout to test info layout
+        test_info_layout.addLayout(form_layout)
+        
+        # Button toolbar for workflow operations - moved inside test info frame
         button_toolbar_layout = QHBoxLayout()
         
         start_btn = QPushButton("开始测试")
         start_btn.setIcon(QIcon.fromTheme("media-playback-start"))
+        start_btn.setStyleSheet("QPushButton { padding: 8px 16px; font-weight: bold; background-color: #4CAF50; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #45a049; }")
         start_btn.clicked.connect(self.start_workflow)
         button_toolbar_layout.addWidget(start_btn)
         
         stop_btn = QPushButton("停止测试")
         stop_btn.setIcon(QIcon.fromTheme("media-playback-stop"))
+        stop_btn.setStyleSheet("QPushButton { padding: 8px 16px; font-weight: bold; background-color: #f44336; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #da190b; }")
         stop_btn.clicked.connect(self.stop_workflow)
         button_toolbar_layout.addWidget(stop_btn)
         
@@ -297,18 +317,23 @@ class DeviceControlWidget(QWidget):
         
         export_btn = QPushButton("导出工作流")
         export_btn.setIcon(QIcon.fromTheme("document-save"))
+        export_btn.setStyleSheet("QPushButton { padding: 8px 16px; background-color: #2196F3; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #1976D2; }")
         export_btn.clicked.connect(self.export_workflow)
         button_toolbar_layout.addWidget(export_btn)
         
         import_btn = QPushButton("导入工作流")
         import_btn.setIcon(QIcon.fromTheme("document-open"))
+        import_btn.setStyleSheet("QPushButton { padding: 8px 16px; background-color: #FF9800; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #F57C00; }")
         import_btn.clicked.connect(self.import_workflow)
         button_toolbar_layout.addWidget(import_btn)
         
         # Add stretch to left-align buttons
         button_toolbar_layout.addStretch()
         
-        workflow_layout.addLayout(button_toolbar_layout)
+        # Add button toolbar to test info layout
+        test_info_layout.addLayout(button_toolbar_layout)
+        
+        workflow_layout.addWidget(test_info_frame)
         
         # Workflow editor
         self.workflow_editor = WorkflowEditorWidget()
@@ -624,6 +649,8 @@ class DeviceControlWidget(QWidget):
             self.test_name_edit.setText(test_name)
             
         test_description = self.test_desc_edit.text().strip()
+        chip_id = self.chip_id_edit.text().strip()
+        device_number = self.device_number_edit.text().strip()
         
         # Prepare workflow parameters
         device_id = device_info['device_id'] or self.selected_port
@@ -634,6 +661,8 @@ class DeviceControlWidget(QWidget):
             "baudrate": 512000,
             "name": test_name,
             "description": test_description,
+            "chip_id": chip_id,
+            "device_number": device_number,
             "steps": steps,
         }
         
@@ -670,8 +699,7 @@ class DeviceControlWidget(QWidget):
                     self.device_info.setText(info_text)
                 
                 
-                # Clear description
-                self.test_desc_edit.clear()
+                # Note: Keep test description, chip_id, and device_number fields for reuse
             else:
                 QMessageBox.warning(self, "Error", f"测试启动失败: {result.get('reason', '未知错误')}")
         

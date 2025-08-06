@@ -103,7 +103,11 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 #### Frontend Components
 - **Main Window**: `qt_app/main_window.py` - Application entry point and tab management
 - **Device Control**: `qt_app/widgets/device_control.py` - Test configuration and execution
+  - Test information input: name, description, chip ID, device number
+  - Integrated workflow controls: start/stop test, import/export workflows
+  - Enhanced UI styling with clear input fields and color-coded buttons
 - **Test History**: `qt_app/widgets/test_history.py` - Data analysis and export
+  - Displays test metadata including chip ID and device number
 - **Real-time Plot**: `qt_app/widgets/realtime_plot.py` - Live data visualization
 - **Workflow Editor**: `qt_app/widgets/workflow_editor.py` - Complex test sequence configuration
 
@@ -118,7 +122,10 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 - **Transfer Test**: CSV with columns Vg (gate voltage), Id (drain current)
 - **Transient Test**: CSV with columns Time, Id (drain current)  
 - **Output Test**: CSV with Vd (drain voltage) and multiple Id columns for different gate voltages
-- **Test Metadata**: JSON files with test parameters and configuration
+- **Test Metadata**: JSON files with test parameters and configuration, including:
+  - Test name and description
+  - Chip ID and device number (optional fields for sample identification)
+  - Workflow parameters and device information
 
 ### Device Communication
 

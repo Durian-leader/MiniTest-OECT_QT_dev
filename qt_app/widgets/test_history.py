@@ -302,6 +302,12 @@ class TestHistoryWidget(QWidget):
         self.test_desc_label.setWordWrap(True)  # Allow wrapping for long descriptions
         test_info_layout.addRow("描述:", self.test_desc_label)
         
+        self.chip_id_label = QLabel()
+        test_info_layout.addRow("芯片ID:", self.chip_id_label)
+        
+        self.device_number_label = QLabel()
+        test_info_layout.addRow("器件编号:", self.device_number_label)
+        
         self.test_device_label = QLabel()
         test_info_layout.addRow("设备:", self.test_device_label)
         
@@ -711,6 +717,12 @@ class TestHistoryWidget(QWidget):
         self.test_id_label.setText(test_info_data.get("test_id", ""))
         self.test_name_label.setText(test_info_data.get("name", ""))
         self.test_desc_label.setText(test_info_data.get("description", ""))  # Show description
+        
+        # Get chip_id and device_number from metadata
+        metadata = test_info_data.get("metadata", {})
+        self.chip_id_label.setText(metadata.get("chip_id", ""))
+        self.device_number_label.setText(metadata.get("device_number", ""))
+        
         self.test_device_label.setText(test_info_data.get("device_id", ""))
         
         # Format created date

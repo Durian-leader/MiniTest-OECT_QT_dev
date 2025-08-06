@@ -481,6 +481,8 @@ class TestManager:
         test_id = params.get("test_id")
         name = params.get("name", "自定义工作流")
         description = params.get("description", "")
+        chip_id = params.get("chip_id", "")
+        device_number = params.get("device_number", "")
         steps = params.get("steps", [])
         
         # 检查必要参数
@@ -515,7 +517,9 @@ class TestManager:
             description=description,
             metadata={
                 "raw_params": params,
-                "total_steps": total_steps
+                "total_steps": total_steps,
+                "chip_id": chip_id,
+                "device_number": device_number
             }
         )
         
