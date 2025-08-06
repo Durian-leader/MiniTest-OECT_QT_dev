@@ -9,7 +9,8 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
                            QTreeWidget, QTreeWidgetItem, QFrame, QGroupBox,
                            QTabWidget, QSizePolicy, QHeaderView, 
                            QFormLayout, QMessageBox, QStyledItemDelegate, QStyle,
-                           QFileDialog, QToolBar, QAction, QAbstractItemView)  # Added QAbstractItemView
+                           QFileDialog, QToolBar, QAction, QAbstractItemView, 
+                           QComboBox)  # Added QComboBox for sorting options
 from PyQt5.QtCore import Qt, QSize, QRect
 from PyQt5.QtGui import QIcon, QColor, QFont, QPalette, QBrush
 
@@ -150,6 +151,10 @@ class TestHistoryWidget(QWidget):
         self.step_data = []
         self.step_data_dict = {}  # 新增：支持多曲线数据存储
         
+        # Sorting preferences
+        self.sort_priorities = ['time', 'device', 'chip_id', 'device_number']
+        self.sort_orders = {'time': 'desc', 'device': 'asc', 'chip_id': 'asc', 'device_number': 'asc'}
+        
         # Plot lines for multiple curves
         self.plot_lines = {}
         
@@ -182,6 +187,23 @@ class TestHistoryWidget(QWidget):
         self.device_list.setSpacing(5)
         self.device_list.currentItemChanged.connect(self.on_device_selected)
         device_layout.addWidget(self.device_list)
+        
+        # Add sorting controls
+        sort_label = QLabel("排序:")
+        sort_label.setFont(QFont("Arial", 10, QFont.Bold))
+        device_layout.addWidget(sort_label)
+        
+        self.sort_combo = QComboBox()
+        self.sort_combo.addItems([
+            "时间优先", "设备名优先", "芯片ID优先", "器件编号优先",
+            "时间+设备名", "时间+芯片ID", "时间+器件编号",
+            "设备名+时间", "设备名+芯片ID", "设备名+器件编号",
+            "芯片ID+时间", "芯片ID+设备名", "芯片ID+器件编号",
+            "器件编号+时间", "器件编号+设备名", "器件编号+芯片ID"
+        ])
+        self.sort_combo.setMaximumWidth(120)
+        self.sort_combo.currentTextChanged.connect(self.on_sort_changed)
+        device_layout.addWidget(self.sort_combo)
         
         refresh_btn = QPushButton("刷新")
         refresh_btn.setMaximumWidth(60)  # Ancho limitado
@@ -406,6 +428,14 @@ class TestHistoryWidget(QWidget):
             
             # Update device list widget
             self.device_list.clear()
+            
+            # Add "ALL" option at first position
+            all_item = QListWidgetItem("ALL")
+            all_item.setData(Qt.UserRole, "ALL")
+            all_item.setBackground(QBrush(QColor(240, 248, 255)))  # Light blue background
+            self.device_list.addItem(all_item)
+            
+            # Add individual devices
             for device_id in self.devices:
                 if device_id:  # Skip empty device IDs
                     item = QListWidgetItem(device_id)
@@ -437,18 +467,19 @@ class TestHistoryWidget(QWidget):
             return
         
         try:
-            # Get tests for selected device
-            self.tests = self.backend.list_saved_tests(self.selected_device)
+            # Get tests for selected device (or all tests if "ALL" is selected)
+            if self.selected_device == "ALL":
+                self.tests = self.backend.list_saved_tests()  # Get all tests
+            else:
+                self.tests = self.backend.list_saved_tests(self.selected_device)
             
             # Remember current selection
             current_test_id = None
             if self.selected_test:
                 current_test_id = self.selected_test.get("test_id")
             
-            # Update test list widget
-            self.test_list.clear()
+            # Load additional test info for all tests
             for test in self.tests:
-                # 预先加载test_info数据
                 test_dir = test.get("dir_path")
                 if test_dir and os.path.exists(test_dir):
                     test_data = self.backend.get_saved_test_data(test_dir)
@@ -458,7 +489,13 @@ class TestHistoryWidget(QWidget):
                         if "description" in test_info:
                             test["description"] = test_info["description"]
                         test["test_info"] = test_info
-                
+            
+            # Sort tests according to current sorting preference
+            self.tests = self.sort_tests(self.tests)
+            
+            # Update test list widget
+            self.test_list.clear()
+            for test in self.tests:
                 # Create list item with test info
                 item = QListWidgetItem()
                 item.setData(Qt.UserRole, test)
@@ -1198,3 +1235,77 @@ class TestHistoryWidget(QWidget):
         
         # 高亮显示最近的点
         self.highlight_point.setData([nearest_x], [nearest_y])
+    
+    def sort_tests(self, tests):
+        """Sort tests according to current sorting preference"""
+        if not tests:
+            return tests
+        
+        # Get current sorting preference from combo box
+        sort_text = self.sort_combo.currentText()
+        
+        # Define sorting key functions
+        def get_sort_key(test):
+            # Extract values for sorting
+            created_at = test.get("created_at", "")
+            device_id = test.get("device_id", "")
+            
+            # Get chip_id and device_number from test_info metadata
+            test_info = test.get("test_info", {})
+            metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
+            chip_id = metadata.get("chip_id", "")
+            device_number = metadata.get("device_number", "")
+            
+            # Convert created_at to timestamp for sorting
+            timestamp = 0
+            if created_at:
+                try:
+                    dt = datetime.fromisoformat(created_at)
+                    timestamp = dt.timestamp()
+                except:
+                    timestamp = 0
+            
+            # Return tuple based on sorting preference
+            if sort_text == "时间优先":
+                return (-timestamp,)  # Descending order (newest first)
+            elif sort_text == "设备名优先":
+                return (device_id.lower(), -timestamp)
+            elif sort_text == "芯片ID优先":
+                return (chip_id.lower(), -timestamp)
+            elif sort_text == "器件编号优先":
+                return (device_number.lower(), -timestamp)
+            elif sort_text == "时间+设备名":
+                return (-timestamp, device_id.lower())
+            elif sort_text == "时间+芯片ID":
+                return (-timestamp, chip_id.lower())
+            elif sort_text == "时间+器件编号":
+                return (-timestamp, device_number.lower())
+            elif sort_text == "设备名+时间":
+                return (device_id.lower(), -timestamp)
+            elif sort_text == "设备名+芯片ID":
+                return (device_id.lower(), chip_id.lower())
+            elif sort_text == "设备名+器件编号":
+                return (device_id.lower(), device_number.lower())
+            elif sort_text == "芯片ID+时间":
+                return (chip_id.lower(), -timestamp)
+            elif sort_text == "芯片ID+设备名":
+                return (chip_id.lower(), device_id.lower())
+            elif sort_text == "芯片ID+器件编号":
+                return (chip_id.lower(), device_number.lower())
+            elif sort_text == "器件编号+时间":
+                return (device_number.lower(), -timestamp)
+            elif sort_text == "器件编号+设备名":
+                return (device_number.lower(), device_id.lower())
+            elif sort_text == "器件编号+芯片ID":
+                return (device_number.lower(), chip_id.lower())
+            else:
+                return (-timestamp,)  # Default to time descending
+        
+        # Sort the tests
+        sorted_tests = sorted(tests, key=get_sort_key)
+        return sorted_tests
+    
+    def on_sort_changed(self, sort_text):
+        """Handle sorting option change"""
+        # Refresh tests to apply new sorting
+        self.refresh_tests()
