@@ -164,9 +164,9 @@ class StepNodeWidget(QWidget):
         step_frame.setLineWidth(1)
         step_frame.setStyleSheet(f"""
             QFrame {{
-                border-left: {3 if self.depth > 0 else 1}px solid {'#1890ff' if self.depth > 0 else '#d9d9d9'};
+                border: 1px solid #d9d9d9;
                 margin-left: {20 * self.depth}px;
-                background-color: {'#f6f6f6' if self.depth > 0 else 'white'};
+                background-color: {'#fafafa' if self.depth > 0 else 'white'};
                 border-radius: 4px;
             }}
         """)
