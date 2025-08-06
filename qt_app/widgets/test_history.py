@@ -82,7 +82,26 @@ class CustomTestItemDelegate(QStyledItemDelegate):
         desc_rect = QRect(rect.left() + 10, rect.top() + 25, rect.width() - 20, 20)
         painter.drawText(desc_rect, Qt.AlignLeft | Qt.AlignVCenter, desc)
         
-        # Dibujar la fecha en la parte inferior derecha
+        # 从test_info获取芯片ID和器件编号
+        test_info = test.get("test_info", {})
+        metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
+        chip_id = metadata.get("chip_id", "")
+        device_number = metadata.get("device_number", "")
+        
+        # 左下角显示芯片ID和器件编号
+        left_info_parts = []
+        if chip_id:
+            left_info_parts.append(f"🧩 {chip_id}")
+        if device_number:
+            left_info_parts.append(f"📍 {device_number}")
+            
+        left_text = " | ".join(left_info_parts) if left_info_parts else ""
+        
+        if left_text:
+            left_rect = QRect(rect.left() + 10, rect.top() + 45, rect.width() - 20, 20)
+            painter.drawText(left_rect, Qt.AlignLeft | Qt.AlignVCenter, left_text)
+        
+        # 右下角显示时间和设备ID
         date_font = QFont(option.font)
         date_font.setPointSize(date_font.pointSize() - 1)
         painter.setFont(date_font)
@@ -95,15 +114,20 @@ class CustomTestItemDelegate(QStyledItemDelegate):
                 timestamp = dt.strftime("%Y-%m-%d %H:%M")
             except:
                 timestamp = created_at
-                
-        date_rect = QRect(rect.left() + 10, rect.top() + 45, rect.width() - 20, 20)
-        painter.drawText(date_rect, Qt.AlignRight | Qt.AlignVCenter, timestamp)
         
-        # Dibujar ícono de dispositivo
         device_id = test.get("device_id", "")
-        device_text = f"🔬 {device_id}" if device_id else "🔬 Sin dispositivo"
-        device_rect = QRect(rect.left() + 10, rect.top() + 45, rect.width() - 20, 20)
-        painter.drawText(device_rect, Qt.AlignLeft | Qt.AlignVCenter, device_text)
+        
+        # 构建右下角显示文本（时间和设备ID）
+        right_info_parts = []
+        if timestamp:
+            right_info_parts.append(timestamp)
+        if device_id:
+            right_info_parts.append(f"🔬 {device_id}")
+            
+        right_text = " | ".join(right_info_parts)
+                
+        right_rect = QRect(rect.left() + 10, rect.top() + 45, rect.width() - 20, 20)
+        painter.drawText(right_rect, Qt.AlignRight | Qt.AlignVCenter, right_text)
 
 class TestHistoryWidget(QWidget):
     """
