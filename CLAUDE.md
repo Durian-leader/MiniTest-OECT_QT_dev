@@ -104,6 +104,7 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 - **Main Window**: `qt_app/main_window.py` - Application entry point and tab management
 - **Device Control**: `qt_app/widgets/device_control.py` - Test configuration and execution
   - Test information input: name, description, chip ID, device number
+  - **Per-device state management**: Each device maintains separate test information settings
   - Integrated workflow controls: start/stop test, import/export workflows
   - Enhanced UI styling with clear input fields and color-coded buttons
   - Device list displays in alphabetical order (A-Z) by device ID

@@ -115,6 +115,7 @@ class DeviceControlWidget(QWidget):
         self.workflows = {}  # {device_port: workflow_steps}
         self.current_test_ids = {}  # {device_port: test_id}
         self.plot_widgets = {}  # {device_port: RealtimePlotWidget}
+        self.test_info = {}  # {device_port: test_info_dict}
         
         # Current selections
         self.selected_port = None
@@ -271,8 +272,6 @@ class DeviceControlWidget(QWidget):
         self.test_name_edit.setPlaceholderText("输入测试名称")
         self.test_name_edit.setEnabled(False)  # 初始化时禁用，因为默认启用自动命名
         self.test_name_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; }")
-        default_name = f"测试_{time.strftime('%Y%m%d%H%M%S')}"
-        self.test_name_edit.setText(default_name)
         self.test_name_edit.textChanged.connect(self.on_test_name_changed)
         form_layout.addRow("测试名称:", self.test_name_edit)
         
@@ -387,9 +386,17 @@ class DeviceControlWidget(QWidget):
         self.auto_naming = enabled
         self.test_name_edit.setEnabled(not enabled)
         
-        # # Generate a new name if auto-naming is enabled
-        # if enabled and self.selected_port:
-        #     self.generate_test_name()
+        # Save the change to the current device's test info
+        if self.selected_port:
+            if self.selected_port in self.test_info:
+                self.test_info[self.selected_port]['auto_naming'] = enabled
+            
+            # Update test name based on auto-naming setting
+            if enabled:
+                self.test_name_edit.setText('（点击开始测试生成）')
+            elif not self.test_name_edit.text() or self.test_name_edit.text() == '（点击开始测试生成）':
+                # If enabling manual naming and no custom name exists, provide a default
+                self.test_name_edit.setText(f"测试-{self.selected_port}")
     
     def on_test_name_changed(self, text):
         """Handle manual changes to test name"""
@@ -417,10 +424,62 @@ class DeviceControlWidget(QWidget):
                 self.workflows[self.selected_port] = current_steps
                 logger.info(f"保存设备 {self.selected_port} 的工作流配置，共 {len(current_steps)} 个步骤")
     
+    def save_current_test_info(self):
+        """保存当前设备的测试信息"""
+        if self.selected_port:
+            test_info = {
+                'test_name': self.test_name_edit.text(),
+                'test_desc': self.test_desc_edit.text(),
+                'chip_id': self.chip_id_edit.text(),
+                'device_number': self.device_number_edit.text(),
+                'auto_naming': self.auto_naming
+            }
+            self.test_info[self.selected_port] = test_info
+            logger.info(f"保存设备 {self.selected_port} 的测试信息")
+    
+    def load_test_info_for_device(self, port):
+        """加载指定设备的测试信息"""
+        if port in self.test_info:
+            # 恢复已保存的测试信息
+            info = self.test_info[port]
+            self.test_name_edit.setText(info.get('test_name', ''))
+            self.test_desc_edit.setText(info.get('test_desc', ''))
+            self.chip_id_edit.setText(info.get('chip_id', ''))
+            self.device_number_edit.setText(info.get('device_number', ''))
+            self.auto_naming = info.get('auto_naming', True)
+            self.auto_naming_check.setChecked(self.auto_naming)
+            self.test_name_edit.setEnabled(not self.auto_naming)
+            logger.info(f"加载设备 {port} 的测试信息")
+        else:
+            # 初始化新设备的默认测试信息
+            self.initialize_default_test_info(port)
+    
+    def initialize_default_test_info(self, port):
+        """为新设备初始化默认测试信息"""
+        self.test_name_edit.setText('（点击开始测试生成）')
+        self.test_desc_edit.setText('')
+        self.chip_id_edit.setText('')
+        self.device_number_edit.setText('')
+        self.auto_naming = True
+        self.auto_naming_check.setChecked(True)
+        self.test_name_edit.setEnabled(False)
+        
+        # 保存默认设置
+        default_info = {
+            'test_name': '（点击开始测试生成）',
+            'test_desc': '',
+            'chip_id': '',
+            'device_number': '',
+            'auto_naming': True
+        }
+        self.test_info[port] = default_info
+        logger.info(f"为设备 {port} 初始化默认测试信息")
+    
     def refresh_devices(self):
         """Refresh the device list"""
-        # 保存当前设备的工作流配置，防止刷新导致丢失
+        # 保存当前设备的工作流配置和测试信息，防止刷新导致丢失
         self.save_current_workflow()
+        self.save_current_test_info()
         
         try:
             # 获取设备列表
@@ -506,10 +565,11 @@ class DeviceControlWidget(QWidget):
         self.refresh_devices()
     def on_device_selected(self, current, previous):
         """Handle device selection"""
-        # 保存上一个设备的工作流配置
+        # 保存上一个设备的工作流配置和测试信息
         if self.selected_port:
             self.previous_port = self.selected_port
             self.save_current_workflow()
+            self.save_current_test_info()
         
         if not current:
             self.selected_port = None
@@ -539,15 +599,11 @@ class DeviceControlWidget(QWidget):
         
         self.workflow_editor.set_steps(self.workflows[port])
         
+        # Load device-specific test information
+        self.load_test_info_for_device(port)
+        
         # Update plot visibility - hide all and show only the current one
         self.update_plot_visibility()
-        
-        # Update test name if auto-naming is enabled
-        if self.auto_naming:
-            # 直接在这里生成名称，而不是调用generate_test_name
-            test_name = f"（点击开始测试生成）"
-            # 更新UI显示
-            self.test_name_edit.setText(test_name)
     
     def update_plot_visibility(self):
         """Update plot visibility based on selected device"""
@@ -866,11 +922,12 @@ class DeviceControlWidget(QWidget):
             self.data_count += processed
     
     def prepare_for_tab_change(self):
-        """在切换标签页前保存当前工作流配置"""
+        """在切换标签页前保存当前工作流配置和测试信息"""
         self.save_current_workflow()
+        self.save_current_test_info()
         
     def restore_after_tab_change(self):
-        """在标签页切换回来后恢复工作流配置"""
+        """在标签页切换回来后恢复工作流配置和测试信息"""
         # 这里不需要特别处理，因为on_device_selected已经负责从workflows字典中加载配置
         # 但我们确保选择状态被保持
         if self.selected_port:
@@ -878,6 +935,9 @@ class DeviceControlWidget(QWidget):
             if self.selected_port in self.workflows:
                 self.workflow_editor.set_steps(self.workflows[self.selected_port])
                 logger.info(f"恢复设备 {self.selected_port} 的工作流配置，共 {len(self.workflows[self.selected_port])} 个步骤")
+            
+            # 确保当前选择的设备测试信息被加载
+            self.load_test_info_for_device(self.selected_port)
 
 
     def handle_backend_message(self, message):
