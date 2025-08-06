@@ -4,7 +4,7 @@ import uuid
 import time
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QListWidget, QListWidgetItem, QSplitter, QMessageBox,
-                            QFileDialog, QFrame, QGroupBox, QToolBar, QAction,
+                            QFileDialog, QFrame, QGroupBox,
                             QLineEdit, QFormLayout, QCheckBox, QStyledItemDelegate, QStyle)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize, QRect
 from PyQt5.QtGui import QIcon, QColor, QBrush, QFont
@@ -279,28 +279,36 @@ class DeviceControlWidget(QWidget):
         
         workflow_layout.addWidget(test_info_frame)
         
-        # Toolbar for workflow operations
-        workflow_toolbar = QToolBar()
+        # Button toolbar for workflow operations
+        button_toolbar_layout = QHBoxLayout()
         
-        start_action = QAction(QIcon.fromTheme("media-playback-start"), "开始测试", self)
-        start_action.triggered.connect(self.start_workflow)
-        workflow_toolbar.addAction(start_action)
+        start_btn = QPushButton("开始测试")
+        start_btn.setIcon(QIcon.fromTheme("media-playback-start"))
+        start_btn.clicked.connect(self.start_workflow)
+        button_toolbar_layout.addWidget(start_btn)
         
-        stop_action = QAction(QIcon.fromTheme("media-playback-stop"), "停止测试", self)
-        stop_action.triggered.connect(self.stop_workflow)
-        workflow_toolbar.addAction(stop_action)
+        stop_btn = QPushButton("停止测试")
+        stop_btn.setIcon(QIcon.fromTheme("media-playback-stop"))
+        stop_btn.clicked.connect(self.stop_workflow)
+        button_toolbar_layout.addWidget(stop_btn)
         
-        workflow_toolbar.addSeparator()
+        # Add some spacing
+        button_toolbar_layout.addSpacing(20)
         
-        export_action = QAction(QIcon.fromTheme("document-save"), "导出工作流", self)
-        export_action.triggered.connect(self.export_workflow)
-        workflow_toolbar.addAction(export_action)
+        export_btn = QPushButton("导出工作流")
+        export_btn.setIcon(QIcon.fromTheme("document-save"))
+        export_btn.clicked.connect(self.export_workflow)
+        button_toolbar_layout.addWidget(export_btn)
         
-        import_action = QAction(QIcon.fromTheme("document-open"), "导入工作流", self)
-        import_action.triggered.connect(self.import_workflow)
-        workflow_toolbar.addAction(import_action)
+        import_btn = QPushButton("导入工作流")
+        import_btn.setIcon(QIcon.fromTheme("document-open"))
+        import_btn.clicked.connect(self.import_workflow)
+        button_toolbar_layout.addWidget(import_btn)
         
-        workflow_layout.addWidget(workflow_toolbar)
+        # Add stretch to left-align buttons
+        button_toolbar_layout.addStretch()
+        
+        workflow_layout.addLayout(button_toolbar_layout)
         
         # Workflow editor
         self.workflow_editor = WorkflowEditorWidget()
