@@ -703,7 +703,7 @@ class DeviceControlWidget(QWidget):
         if self.auto_naming:
             device_id = device_info.get('device_id', self.selected_port)
             timestamp = time.strftime('%Y%m%d%H%M%S')
-            test_name = f"测试_{device_id}_{timestamp}"
+            test_name = f"{device_id}_{timestamp}"
             self.test_name_edit.setText(test_name)
         
         # Get test name and description from input fields
