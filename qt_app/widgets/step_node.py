@@ -1,8 +1,8 @@
 import uuid
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                           QGroupBox, QLabel, QFrame)
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QIcon
+                           QGroupBox, QLabel, QFrame, QApplication)
+from PyQt5.QtCore import Qt, pyqtSignal, QMimeData, pyqtProperty
+from PyQt5.QtGui import QIcon, QDrag, QPainter, QPixmap, QPalette, QCursor, QColor
 
 from qt_app.widgets.step_params_form import StepParamsFormWidget
 # 导入自定义下拉框
@@ -126,11 +126,14 @@ class CustomComboBox(QComboBox):
 class StepNodeWidget(QWidget):
     """
     Widget for editing a single step in the workflow, supporting nested steps for loops
+    Supports drag & drop reordering and collapsible interface
     """
     
     # Signals
     step_updated = pyqtSignal()
     step_removed = pyqtSignal(int)
+    step_drag_started = pyqtSignal(int)  # For drag & drop
+    step_move_requested = pyqtSignal(int, int)  # from_index, to_index
     
     def __init__(self, step, parent_list, index, parent_widget=None, depth=0):
         super().__init__()
@@ -140,6 +143,14 @@ class StepNodeWidget(QWidget):
         self.parent_widget = parent_widget
         self.depth = depth  # For nested steps
         self.child_widgets = []  # Store child step widgets
+        
+        # Drag & drop support
+        self.drag_start_position = None
+        self.setAcceptDrops(True)
+        
+        # Collapsible state
+        self.is_collapsed = False
+        
         self.setup_ui()
     
     def setup_ui(self):
@@ -162,8 +173,23 @@ class StepNodeWidget(QWidget):
         
         step_layout = QVBoxLayout(step_frame)
         
-        # Header with type selector and buttons
-        header_layout = QHBoxLayout()
+        # Header with type selector and buttons (clickable for collapse)
+        self.header_frame = QFrame()
+        self.header_frame.setStyleSheet("""
+            QFrame:hover {
+                background-color: rgba(24, 144, 255, 0.1);
+                cursor: pointer;
+            }
+        """)
+        self.header_frame.setCursor(QCursor(Qt.PointingHandCursor))
+        self.header_frame.mousePressEvent = self.on_header_click
+        
+        header_layout = QHBoxLayout(self.header_frame)
+        
+        # Collapse indicator
+        self.collapse_indicator = QLabel("▼")
+        self.collapse_indicator.setStyleSheet("font-size: 10px; color: #666; margin-right: 5px;")
+        header_layout.addWidget(self.collapse_indicator)
         
         # Step number label
         num_label = QLabel(f"步骤 {self.index + 1}")
@@ -194,6 +220,12 @@ class StepNodeWidget(QWidget):
         self.add_child_btn.setVisible(current_type == "loop")
         header_layout.addWidget(self.add_child_btn)
         
+        # Parameters preview (shown when collapsed)
+        self.params_preview = QLabel()
+        self.params_preview.setStyleSheet("color: #666; font-style: italic; margin-left: 10px;")
+        self.params_preview.setText(self.generate_params_preview())
+        header_layout.addWidget(self.params_preview)
+        
         header_layout.addStretch()
         
         # Remove button
@@ -202,12 +234,17 @@ class StepNodeWidget(QWidget):
         remove_btn.clicked.connect(self.on_remove)
         header_layout.addWidget(remove_btn)
         
-        step_layout.addLayout(header_layout)
+        step_layout.addWidget(self.header_frame)
+        
+        # Collapsible content container
+        self.content_container = QWidget()
+        content_layout = QVBoxLayout(self.content_container)
+        content_layout.setContentsMargins(0, 0, 0, 0)
         
         # Parameters form
         self.params_form = StepParamsFormWidget(self.step)
         self.params_form.params_updated.connect(self.on_params_updated)
-        step_layout.addWidget(self.params_form)
+        content_layout.addWidget(self.params_form)
         
         # Container for child steps (for loop type)
         self.children_container = QWidget()
@@ -215,8 +252,14 @@ class StepNodeWidget(QWidget):
         self.children_layout.setContentsMargins(0, 0, 0, 0)
         self.children_layout.setSpacing(10)
         
-        step_layout.addWidget(self.children_container)
+        content_layout.addWidget(self.children_container)
         self.children_container.setVisible(current_type == "loop" and "steps" in self.step)
+        
+        step_layout.addWidget(self.content_container)
+        
+        # Initially show content (not collapsed) and hide preview
+        self.content_container.setVisible(not self.is_collapsed)
+        self.params_preview.setVisible(self.is_collapsed)
         
         # Add to main layout
         main_layout.addWidget(step_frame)
@@ -307,7 +350,58 @@ class StepNodeWidget(QWidget):
     
     def on_params_updated(self):
         """Handle parameter updates"""
+        # Update params preview
+        self.params_preview.setText(self.generate_params_preview())
         self.step_updated.emit()
+    
+    def on_header_click(self, event):
+        """Handle header click for collapse/expand"""
+        self.toggle_collapse()
+    
+    def toggle_collapse(self):
+        """Toggle collapse/expand state"""
+        self.is_collapsed = not self.is_collapsed
+        self.content_container.setVisible(not self.is_collapsed)
+        
+        # Update collapse indicator
+        self.collapse_indicator.setText("▶" if self.is_collapsed else "▼")
+        
+        # Show/hide params preview
+        self.params_preview.setVisible(self.is_collapsed)
+    
+    def generate_params_preview(self):
+        """Generate a concise parameter preview string"""
+        step_type = self.step.get("type", "unknown")
+        params = self.step.get("params", {})
+        
+        if step_type == "transfer":
+            gate_start = params.get("gateVoltageStart", 0)
+            gate_end = params.get("gateVoltageEnd", 0)
+            drain_v = params.get("drainVoltage", 0)
+            return f"Vg: {gate_start}~{gate_end}mV, Vd: {drain_v}mV"
+        
+        elif step_type == "transient":
+            gate_bottom = params.get("gateVoltageBottom", 0)
+            gate_top = params.get("gateVoltageTop", 0)
+            cycles = params.get("cycles", 1)
+            return f"Vg: {gate_bottom}~{gate_top}mV, {cycles}次循环"
+        
+        elif step_type == "output":
+            gate_list = params.get("gateVoltageList", [])
+            drain_start = params.get("drainVoltageStart", 0)
+            drain_end = params.get("drainVoltageEnd", 0)
+            if isinstance(gate_list, str):
+                gate_str = gate_list[:20] + "..." if len(gate_list) > 20 else gate_list
+            else:
+                gate_str = str(gate_list)
+            return f"Vg: {gate_str}mV, Vd: {drain_start}~{drain_end}mV"
+        
+        elif step_type == "loop":
+            iterations = self.step.get("iterations", 1)
+            child_count = len(self.step.get("steps", []))
+            return f"{iterations}次循环, {child_count}个子步骤"
+        
+        return "无参数"
     
     def on_remove(self):
         """Handle step removal"""
@@ -388,3 +482,68 @@ class StepNodeWidget(QWidget):
             
             # Emit signal for update
             self.step_updated.emit()
+    
+    def mousePressEvent(self, event):
+        """Handle mouse press for drag initiation"""
+        if event.button() == Qt.LeftButton:
+            self.drag_start_position = event.pos()
+        super().mousePressEvent(event)
+    
+    def mouseMoveEvent(self, event):
+        """Handle mouse move for drag & drop"""
+        if not (event.buttons() & Qt.LeftButton):
+            return
+        
+        if not self.drag_start_position:
+            return
+        
+        if ((event.pos() - self.drag_start_position).manhattanLength() < 
+            QApplication.startDragDistance()):
+            return
+        
+        # Start drag operation
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        mime_data.setText(f"step_move:{self.index}")
+        drag.setMimeData(mime_data)
+        
+        # Create drag pixmap
+        pixmap = self.grab()
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+        painter.fillRect(pixmap.rect(), QColor(0, 0, 0, 127))
+        painter.end()
+        
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(self.drag_start_position)
+        
+        # Execute drag
+        self.step_drag_started.emit(self.index)
+        drop_action = drag.exec_(Qt.MoveAction)
+        
+        super().mouseMoveEvent(event)
+    
+    def dragEnterEvent(self, event):
+        """Handle drag enter"""
+        if event.mimeData().hasText() and event.mimeData().text().startswith("step_move:"):
+            event.acceptProposedAction()
+    
+    def dragMoveEvent(self, event):
+        """Handle drag move"""
+        if event.mimeData().hasText() and event.mimeData().text().startswith("step_move:"):
+            event.acceptProposedAction()
+    
+    def dropEvent(self, event):
+        """Handle drop event"""
+        if event.mimeData().hasText() and event.mimeData().text().startswith("step_move:"):
+            source_text = event.mimeData().text()
+            try:
+                from_index = int(source_text.split(":")[1])
+                to_index = self.index
+                
+                if from_index != to_index:
+                    self.step_move_requested.emit(from_index, to_index)
+                
+                event.acceptProposedAction()
+            except (ValueError, IndexError):
+                pass

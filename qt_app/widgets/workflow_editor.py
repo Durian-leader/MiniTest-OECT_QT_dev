@@ -94,6 +94,7 @@ class WorkflowEditorWidget(QWidget):
             step_widget = StepNodeWidget(step, self.steps, i, parent_widget=self)
             step_widget.step_updated.connect(self.on_step_updated)
             step_widget.step_removed.connect(lambda idx=i: self.remove_step(idx))
+            step_widget.step_move_requested.connect(self.move_step)
             self.steps_layout.addWidget(step_widget)
     
     def clear_step_widgets(self):
@@ -113,6 +114,26 @@ class WorkflowEditorWidget(QWidget):
         """Remove a step at the given index"""
         if 0 <= index < len(self.steps):
             del self.steps[index]
+            self.refresh_steps()
+            self.workflow_updated.emit()
+    
+    def move_step(self, from_index, to_index):
+        """Move a step from one position to another"""
+        if (0 <= from_index < len(self.steps) and 
+            0 <= to_index < len(self.steps) and 
+            from_index != to_index):
+            
+            # Remove step from original position
+            step = self.steps.pop(from_index)
+            
+            # Adjust target index if necessary
+            if from_index < to_index:
+                to_index -= 1
+            
+            # Insert at new position
+            self.steps.insert(to_index, step)
+            
+            # Refresh UI
             self.refresh_steps()
             self.workflow_updated.emit()
     
