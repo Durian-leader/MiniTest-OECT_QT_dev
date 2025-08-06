@@ -178,7 +178,6 @@ class StepNodeWidget(QWidget):
         self.header_frame.setStyleSheet("""
             QFrame:hover {
                 background-color: rgba(24, 144, 255, 0.1);
-                cursor: pointer;
             }
         """)
         self.header_frame.setCursor(QCursor(Qt.PointingHandCursor))
