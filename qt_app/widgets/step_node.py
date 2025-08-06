@@ -147,6 +147,7 @@ class StepNodeWidget(QWidget):
         # Drag & drop support
         self.drag_start_position = None
         self.setAcceptDrops(True)
+        self.is_dragging = False
         
         # Collapsible state
         self.is_collapsed = False
@@ -181,7 +182,6 @@ class StepNodeWidget(QWidget):
             }
         """)
         self.header_frame.setCursor(QCursor(Qt.PointingHandCursor))
-        self.header_frame.mousePressEvent = self.on_header_click
         
         header_layout = QHBoxLayout(self.header_frame)
         
@@ -353,9 +353,6 @@ class StepNodeWidget(QWidget):
         self.params_preview.setText(self.generate_params_preview())
         self.step_updated.emit()
     
-    def on_header_click(self, event):
-        """Handle header click for collapse/expand"""
-        self.toggle_collapse()
     
     def toggle_collapse(self):
         """Toggle collapse/expand state"""
@@ -440,8 +437,30 @@ class StepNodeWidget(QWidget):
         # Emit signal for update
         self.step_updated.emit()
     
+    def save_child_collapse_states(self):
+        """Save current collapse states of child step widgets"""
+        child_states = {}
+        for child_widget in self.child_widgets:
+            if hasattr(child_widget, 'step') and hasattr(child_widget, 'is_collapsed'):
+                step_id = child_widget.step.get('id')
+                if step_id:
+                    child_states[step_id] = child_widget.is_collapsed
+        return child_states
+    
+    def restore_child_collapse_states(self, child_states):
+        """Restore collapse states to child step widgets"""
+        for child_widget in self.child_widgets:
+            if hasattr(child_widget, 'step') and hasattr(child_widget, 'is_collapsed'):
+                step_id = child_widget.step.get('id')
+                if step_id and step_id in child_states:
+                    if child_states[step_id]:
+                        child_widget.toggle_collapse()
+    
     def refresh_child_steps(self):
         """Refresh child step widgets"""
+        # Save current child collapse states
+        child_states = self.save_child_collapse_states()
+        
         # Clear existing child widgets
         self.clear_child_widgets()
         
@@ -461,6 +480,9 @@ class StepNodeWidget(QWidget):
                 
                 self.children_layout.addWidget(child_widget)
                 self.child_widgets.append(child_widget)
+        
+        # Restore child collapse states
+        self.restore_child_collapse_states(child_states)
     
     def clear_child_widgets(self):
         """Clear all child widgets"""
@@ -510,9 +532,10 @@ class StepNodeWidget(QWidget):
             self.step_updated.emit()
     
     def mousePressEvent(self, event):
-        """Handle mouse press for drag initiation"""
+        """Handle mouse press for drag initiation or collapse toggle"""
         if event.button() == Qt.LeftButton:
             self.drag_start_position = event.pos()
+            self.is_dragging = False
         super().mousePressEvent(event)
     
     def mouseMoveEvent(self, event):
@@ -526,6 +549,9 @@ class StepNodeWidget(QWidget):
         if ((event.pos() - self.drag_start_position).manhattanLength() < 
             QApplication.startDragDistance()):
             return
+        
+        # Mark as dragging
+        self.is_dragging = True
         
         # Start drag operation
         drag = QDrag(self)
@@ -607,3 +633,20 @@ class StepNodeWidget(QWidget):
         
         # Reject invalid drops
         event.ignore()
+    
+    def mouseReleaseEvent(self, event):
+        """Handle mouse release for collapse toggle"""
+        if (event.button() == Qt.LeftButton and 
+            self.drag_start_position and 
+            not self.is_dragging):
+            
+            # Check if click was on header area
+            header_rect = self.header_frame.geometry()
+            if header_rect.contains(event.pos()):
+                self.toggle_collapse()
+        
+        # Reset drag state
+        self.drag_start_position = None
+        self.is_dragging = False
+        
+        super().mouseReleaseEvent(event)

@@ -18,6 +18,7 @@ class WorkflowEditorWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.steps = []
+        self.collapse_states = {}  # Store collapse states by step id
         self.setup_ui()
     
     def setup_ui(self):
@@ -81,8 +82,47 @@ class WorkflowEditorWidget(QWidget):
         self.refresh_steps()
         self.workflow_updated.emit()
     
+    def save_collapse_states(self):
+        """Save current collapse states of all step widgets"""
+        for i in range(self.steps_layout.count()):
+            item = self.steps_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if widget and hasattr(widget, 'step') and hasattr(widget, 'is_collapsed'):
+                step_id = widget.step.get('id')
+                if step_id:
+                    self.collapse_states[step_id] = widget.is_collapsed
+                    # Also save child states for loop steps
+                    if hasattr(widget, 'child_widgets'):
+                        for child_widget in widget.child_widgets:
+                            if hasattr(child_widget, 'step') and hasattr(child_widget, 'is_collapsed'):
+                                child_step_id = child_widget.step.get('id')
+                                if child_step_id:
+                                    self.collapse_states[child_step_id] = child_widget.is_collapsed
+    
+    def restore_collapse_states(self):
+        """Restore collapse states to step widgets"""
+        for i in range(self.steps_layout.count()):
+            item = self.steps_layout.itemAt(i)
+            widget = item.widget() if item else None
+            if widget and hasattr(widget, 'step') and hasattr(widget, 'is_collapsed'):
+                step_id = widget.step.get('id')
+                if step_id and step_id in self.collapse_states:
+                    if self.collapse_states[step_id]:
+                        widget.toggle_collapse()
+                    # Also restore child states for loop steps
+                    if hasattr(widget, 'child_widgets'):
+                        for child_widget in widget.child_widgets:
+                            if hasattr(child_widget, 'step') and hasattr(child_widget, 'is_collapsed'):
+                                child_step_id = child_widget.step.get('id')
+                                if child_step_id and child_step_id in self.collapse_states:
+                                    if self.collapse_states[child_step_id]:
+                                        child_widget.toggle_collapse()
+    
     def refresh_steps(self):
         """Refresh the step editor UI"""
+        # Save current collapse states
+        self.save_collapse_states()
+        
         # Hide empty label if there are steps
         self.empty_label.setVisible(len(self.steps) == 0)
         
@@ -96,6 +136,9 @@ class WorkflowEditorWidget(QWidget):
             step_widget.step_removed.connect(lambda idx=i: self.remove_step(idx))
             step_widget.step_move_requested.connect(self.move_step)
             self.steps_layout.addWidget(step_widget)
+        
+        # Restore collapse states
+        self.restore_collapse_states()
     
     def clear_step_widgets(self):
         """Clear all step widgets from the layout"""
