@@ -863,13 +863,17 @@ class DeviceControlWidget(QWidget):
                 if not isinstance(steps, list):
                     raise ValueError("工作流文件格式无效")
                 
-                # Set steps to workflow editor
-                self.workflow_editor.set_steps(steps)
+                # Get current steps and append imported steps
+                current_steps = self.workflow_editor.get_steps()
+                combined_steps = current_steps + steps
+                
+                # Set combined steps to workflow editor
+                self.workflow_editor.set_steps(combined_steps)
                 
                 # Store for current device
-                self.workflows[self.selected_port] = steps
+                self.workflows[self.selected_port] = combined_steps
                 
-                QMessageBox.information(self, "Success", "工作流已导入")
+                QMessageBox.information(self, "Success", f"工作流已导入并添加到当前工作流后面 (添加了 {len(steps)} 个步骤)")
             
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"导入工作流时发生错误: {str(e)}")

@@ -106,6 +106,7 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
   - Test information input: name, description, chip ID, device number
   - **Per-device state management**: Each device maintains separate test information settings
   - Integrated workflow controls: start/stop test, import/export workflows
+  - Workflow import appends to current workflow instead of overwriting
   - Enhanced UI styling with clear input fields and color-coded buttons
   - Device list displays in alphabetical order (A-Z) by device ID
 - **Test History**: `qt_app/widgets/test_history.py` - Data analysis and export
