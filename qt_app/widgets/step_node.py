@@ -344,6 +344,9 @@ class StepNodeWidget(QWidget):
         # Update params form
         self.params_form.set_step(self.step)
         
+        # Update params preview immediately after type change
+        self.params_preview.setText(self.generate_params_preview())
+        
         # Emit signal for update
         self.step_updated.emit()
     
