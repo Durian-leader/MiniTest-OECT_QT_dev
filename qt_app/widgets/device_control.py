@@ -449,10 +449,10 @@ class DeviceControlWidget(QWidget):
             # Clear and repopulate list
             self.device_list.clear()
             
+            # Create a comprehensive device list that merges current info with new scan results
+            final_devices = []
             for device in devices:
-                item = QListWidgetItem()
                 port = device['device']
-                
                 # 重要修改：如果设备已经在测试中，优先使用保存的设备信息
                 if port in self.current_test_ids and port in current_devices:
                     # 使用之前保存的设备信息（包含设备ID）
@@ -460,6 +460,14 @@ class DeviceControlWidget(QWidget):
                 else:
                     # 使用新查询的设备信息
                     device_for_display = device
+                final_devices.append(device_for_display)
+            
+            # Sort devices alphabetically by device_id or device port
+            devices_sorted = sorted(final_devices, key=lambda d: d.get('device_id', d.get('device', '')).upper())
+            
+            for device_for_display in devices_sorted:
+                item = QListWidgetItem()
+                port = device_for_display['device']
                 
                 # Device display name
                 display_name = f"{device_for_display['description']}"
