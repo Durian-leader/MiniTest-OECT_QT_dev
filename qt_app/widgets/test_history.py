@@ -10,15 +10,296 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
                            QTabWidget, QSizePolicy, QHeaderView, 
                            QFormLayout, QMessageBox, QStyledItemDelegate, QStyle,
                            QFileDialog, QToolBar, QAction, QAbstractItemView, 
-                           QComboBox)  # Added QComboBox for sorting options
-from PyQt5.QtCore import Qt, QSize, QRect
-from PyQt5.QtGui import QIcon, QColor, QFont, QPalette, QBrush
+                           QComboBox, QApplication)  # Added QComboBox for sorting options
+from PyQt5.QtCore import Qt, QSize, QRect, QMimeData, pyqtSignal
+from PyQt5.QtGui import QIcon, QColor, QFont, QPalette, QBrush, QDrag, QPainter
 
 import pyqtgraph as pg
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
 logger = get_module_logger() 
 #####################################################################
+
+class DraggableSortBlock(QLabel):
+    """拖拽排序块"""
+    
+    sort_direction_changed = pyqtSignal(str, bool)  # 排序方向变化信号 (sort_key, is_ascending)
+    
+    def __init__(self, sort_key, display_name, parent=None):
+        super().__init__(parent)
+        self.sort_key = sort_key
+        self.display_name = display_name
+        self.is_ascending = True if sort_key != 'time' else False  # 时间默认降序，其他升序
+        self.setAcceptDrops(True)
+        self.setMinimumWidth(110)  # 最小宽度以容纳箭头
+        self.setMaximumHeight(35)  # 最大高度以完整显示文字
+        self.setAlignment(Qt.AlignCenter)
+        
+        # 更新显示文本
+        self.update_display_text()
+        
+        # 设置样式
+        self.update_style()
+    
+    def update_display_text(self):
+        """更新显示文本，包含排序方向箭头"""
+        arrow = " ↑" if self.is_ascending else " ↓"
+        self.setText(self.display_name + arrow)
+    
+    def update_style(self):
+        """更新样式，升序和降序使用不同颜色"""
+        if self.is_ascending:
+            # 升序 - 蓝绿色
+            style = """
+                QLabel {
+                    background-color: #f0f8ff;
+                    border: 2px solid #87ceeb;
+                    border-radius: 15px;
+                    padding: 5px 10px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #2e8b57;
+                }
+                QLabel:hover {
+                    background-color: #e6f3ff;
+                    border-color: #4169e1;
+                }
+            """
+        else:
+            # 降序 - 橙色
+            style = """
+                QLabel {
+                    background-color: #fff8dc;
+                    border: 2px solid #daa520;
+                    border-radius: 15px;
+                    padding: 5px 10px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #b8860b;
+                }
+                QLabel:hover {
+                    background-color: #ffefd5;
+                    border-color: #ff8c00;
+                }
+            """
+        self.setStyleSheet(style)
+    
+    def toggle_sort_direction(self):
+        """切换排序方向"""
+        self.is_ascending = not self.is_ascending
+        self.update_display_text()
+        self.update_style()
+        
+        # 发出信号通知排序方向变化
+        self.sort_direction_changed.emit(self.sort_key, self.is_ascending)
+        
+    def mousePressEvent(self, event):
+        """鼠标按下事件，区分单击和拖拽"""
+        if event.button() == Qt.LeftButton:
+            self.drag_start_position = event.pos()
+            
+    def mouseMoveEvent(self, event):
+        """鼠标移动事件，执行拖拽"""
+        if not (event.buttons() & Qt.LeftButton):
+            return
+        
+        if ((event.pos() - self.drag_start_position).manhattanLength() < 
+            QApplication.startDragDistance()):
+            return
+            
+        # 标记为拖拽状态
+        self.is_dragging = True
+            
+        # 创建拖拽对象
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        mime_data.setText(self.sort_key)
+        drag.setMimeData(mime_data)
+        
+        # 创建拖拽时的视觉反馈
+        pixmap = self.grab()
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+        painter.fillRect(pixmap.rect(), QColor(0, 0, 0, 160))
+        painter.end()
+        
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(event.pos())
+        
+        # 执行拖拽
+        drop_action = drag.exec_(Qt.MoveAction)
+        self.is_dragging = False
+        
+    def mouseReleaseEvent(self, event):
+        """鼠标释放事件，处理单击"""
+        if (event.button() == Qt.LeftButton and 
+            hasattr(self, 'drag_start_position')):
+            
+            # 检查是否是简单的单击（没有移动太远，且没有进行拖拽）
+            if (not hasattr(self, 'is_dragging') and 
+                (event.pos() - self.drag_start_position).manhattanLength() < 
+                QApplication.startDragDistance()):
+                # 单击 - 切换排序方向
+                self.toggle_sort_direction()
+        
+        # 清理临时变量
+        if hasattr(self, 'is_dragging'):
+            delattr(self, 'is_dragging')
+        
+        super().mouseReleaseEvent(event)
+        
+    def dragEnterEvent(self, event):
+        """拖拽进入事件"""
+        if event.mimeData().hasText():
+            event.accept()
+            # 拖拽进入时的视觉反馈
+            self.setStyleSheet("""
+                QLabel {
+                    background-color: #fffacd;
+                    border: 2px dashed #ffd700;
+                    border-radius: 15px;
+                    padding: 5px 10px;
+                    font-weight: bold;
+                    font-size: 11px;
+                    color: #ff6347;
+                }
+            """)
+        else:
+            event.ignore()
+            
+    def dragLeaveEvent(self, event):
+        """拖拽离开事件"""
+        # 恢复正确的样式（根据升降序状态）
+        self.update_style()
+        
+    def dropEvent(self, event):
+        """拖拽放下事件"""
+        source_key = event.mimeData().text()
+        target_key = self.sort_key
+        
+        if source_key != target_key:
+            # 通知父容器插队
+            container = self.parent()
+            if hasattr(container, 'insert_block'):
+                container.insert_block(source_key, target_key)
+        
+        # 恢复原始样式
+        self.dragLeaveEvent(event)
+        event.accept()
+
+class SortingContainer(QWidget):
+    """排序容器，包含所有拖拽块"""
+    
+    order_changed = pyqtSignal(list)  # 排序变化信号
+    sort_config_changed = pyqtSignal(dict)  # 排序配置变化信号 (包含排序顺序和升降序)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(5, 5, 5, 5)
+        self.layout.setSpacing(5)
+        
+        # 设置固定的最大宽度，保持紧凑布局
+        self.setMaximumWidth(880)  # 6个块 × 110px + 间距 + 说明文字 ≈ 880px
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        
+        # 初始化排序块
+        self.sort_blocks = {}
+        self.sort_order = ['time', 'name', 'device', 'chip_id', 'device_number', 'description']
+        self.sort_directions = {}  # 追踪每个字段的升降序
+        
+        # 排序块定义
+        block_definitions = [
+            ('time', '测试时间'),
+            ('name', '测试名称'),
+            ('device', '测试设备'),
+            ('chip_id', '芯片ID'),
+            ('device_number', '器件编号'),
+            ('description', '测试描述')
+        ]
+        
+        # 创建排序块
+        for sort_key, display_name in block_definitions:
+            block = DraggableSortBlock(sort_key, display_name, self)
+            self.sort_blocks[sort_key] = block
+            # 初始化排序方向
+            self.sort_directions[sort_key] = block.is_ascending
+            # 连接排序方向变化信号
+            block.sort_direction_changed.connect(self.on_sort_direction_changed)
+            self.layout.addWidget(block)
+            
+        # 添加弹性空间
+        self.layout.addStretch()
+        
+        # 添加说明标签
+        help_label = QLabel("拖拽调整排序优先级，点击切换升/降序")
+        help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        self.layout.addWidget(help_label)
+    
+    def on_sort_direction_changed(self, sort_key, is_ascending):
+        """处理排序方向变化"""
+        self.sort_directions[sort_key] = is_ascending
+        
+        # 发出排序配置变化信号
+        config = {
+            'order': self.get_sort_order(),
+            'directions': self.sort_directions.copy()
+        }
+        self.sort_config_changed.emit(config)
+        
+    def insert_block(self, source_key, target_key):
+        """插队方式移动排序块：将源块插入到目标块的位置"""
+        if source_key not in self.sort_blocks or target_key not in self.sort_blocks:
+            return
+        if source_key == target_key:
+            return
+            
+        source_block = self.sort_blocks[source_key]
+        target_block = self.sort_blocks[target_key]
+        
+        # 获取当前位置索引
+        source_index = self.layout.indexOf(source_block)
+        target_index = self.layout.indexOf(target_block)
+        
+        # 移除源块
+        self.layout.removeWidget(source_block)
+        
+        # 重新计算目标索引（因为移除源块后，索引可能发生变化）
+        # 如果源块在目标块之前，目标索引需要减1
+        if source_index < target_index:
+            target_index -= 1
+        
+        # 在目标位置插入源块
+        self.layout.insertWidget(target_index, source_block)
+            
+        # 更新排序顺序
+        self.update_sort_order()
+        
+        # 发出排序变化信号（保持向后兼容）
+        self.order_changed.emit(self.sort_order)
+        
+        # 发出排序配置变化信号
+        config = {
+            'order': self.get_sort_order(),
+            'directions': self.sort_directions.copy()
+        }
+        self.sort_config_changed.emit(config)
+        
+    def update_sort_order(self):
+        """更新排序顺序列表"""
+        self.sort_order = []
+        
+        # 按照布局中的顺序重新构建排序列表
+        for i in range(self.layout.count()):
+            item = self.layout.itemAt(i)
+            if item and isinstance(item.widget(), DraggableSortBlock):
+                block = item.widget()
+                self.sort_order.append(block.sort_key)
+                
+    def get_sort_order(self):
+        """获取当前排序顺序"""
+        return self.sort_order.copy()
+
 class CustomTestItemDelegate(QStyledItemDelegate):
     """Custom delegate for rendering test list items with more information"""
     
@@ -151,9 +432,16 @@ class TestHistoryWidget(QWidget):
         self.step_data = []
         self.step_data_dict = {}  # 新增：支持多曲线数据存储
         
-        # Sorting preferences
-        self.sort_priorities = ['time', 'device', 'chip_id', 'device_number']
-        self.sort_orders = {'time': 'desc', 'device': 'asc', 'chip_id': 'asc', 'device_number': 'asc'}
+        # Sorting preferences - 更新为新的拖拽排序
+        self.sort_priorities = ['time', 'name', 'device', 'chip_id', 'device_number', 'description']
+        self.sort_directions = {
+            'time': False,      # 时间默认降序
+            'name': True,       # 名称默认升序
+            'device': True,     # 设备默认升序
+            'chip_id': True,    # 芯片ID默认升序
+            'device_number': True,  # 器件编号默认升序
+            'description': True     # 描述默认升序
+        }
         
         # Plot lines for multiple curves
         self.plot_lines = {}
@@ -171,7 +459,7 @@ class TestHistoryWidget(QWidget):
         # Device selection section - OPTIMIZADO
         device_frame = QFrame()
         device_frame.setFrameShape(QFrame.StyledPanel)
-        device_frame.setMaximumHeight(40)  # Reducido de 50 a 40
+        device_frame.setMaximumHeight(45)  # 增加高度以适应更高的排序块
         device_layout = QHBoxLayout(device_frame)
         device_layout.setContentsMargins(5, 2, 5, 2)  # Márgenes muy pequeños
         
@@ -181,29 +469,22 @@ class TestHistoryWidget(QWidget):
         
         self.device_list = QListWidget()
         self.device_list.setFlow(QListWidget.LeftToRight)
-        self.device_list.setMaximumHeight(100)  # Reducido de 50 a 30
+        self.device_list.setMaximumHeight(35)  # 与排序块高度保持一致
         self.device_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.device_list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.device_list.setSpacing(5)
         self.device_list.currentItemChanged.connect(self.on_device_selected)
         device_layout.addWidget(self.device_list)
         
-        # Add sorting controls
+        # Add drag-and-drop sorting controls
         sort_label = QLabel("排序:")
         sort_label.setFont(QFont("Arial", 10, QFont.Bold))
         device_layout.addWidget(sort_label)
         
-        self.sort_combo = QComboBox()
-        self.sort_combo.addItems([
-            "时间优先", "设备名优先", "芯片ID优先", "器件编号优先",
-            "时间+设备名", "时间+芯片ID", "时间+器件编号",
-            "设备名+时间", "设备名+芯片ID", "设备名+器件编号",
-            "芯片ID+时间", "芯片ID+设备名", "芯片ID+器件编号",
-            "器件编号+时间", "器件编号+设备名", "器件编号+芯片ID"
-        ])
-        self.sort_combo.setMaximumWidth(120)
-        self.sort_combo.currentTextChanged.connect(self.on_sort_changed)
-        device_layout.addWidget(self.sort_combo)
+        self.sorting_container = SortingContainer()
+        self.sorting_container.order_changed.connect(self.on_sort_order_changed)
+        self.sorting_container.sort_config_changed.connect(self.on_sort_config_changed)
+        device_layout.addWidget(self.sorting_container)
         
         refresh_btn = QPushButton("刷新")
         refresh_btn.setMaximumWidth(60)  # Ancho limitado
@@ -1237,75 +1518,138 @@ class TestHistoryWidget(QWidget):
         self.highlight_point.setData([nearest_x], [nearest_y])
     
     def sort_tests(self, tests):
-        """Sort tests according to current sorting preference"""
+        """根据拖拽排序优先级对测试进行排序"""
         if not tests:
             return tests
         
-        # Get current sorting preference from combo box
-        sort_text = self.sort_combo.currentText()
-        
-        # Define sorting key functions
         def get_sort_key(test):
-            # Extract values for sorting
-            created_at = test.get("created_at", "")
-            device_id = test.get("device_id", "")
+            """根据当前排序优先级生成排序键"""
+            sort_values = []
             
-            # Get chip_id and device_number from test_info metadata
-            test_info = test.get("test_info", {})
-            metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
-            chip_id = metadata.get("chip_id", "")
-            device_number = metadata.get("device_number", "")
-            
-            # Convert created_at to timestamp for sorting
-            timestamp = 0
-            if created_at:
-                try:
-                    dt = datetime.fromisoformat(created_at)
-                    timestamp = dt.timestamp()
-                except:
+            for priority in self.sort_priorities:
+                is_ascending = self.sort_directions.get(priority, True)
+                
+                if priority == 'time':
+                    # 时间排序
+                    created_at = test.get("created_at", "")
                     timestamp = 0
+                    if created_at:
+                        try:
+                            dt = datetime.fromisoformat(created_at)
+                            timestamp = dt.timestamp()
+                        except:
+                            timestamp = 0
+                    # 根据升降序决定是否取负值
+                    sort_values.append(timestamp if is_ascending else -timestamp)
+                    
+                elif priority == 'name':
+                    # 测试名称排序
+                    name = test.get("name", "").lower()
+                    # 对于字符串，降序通过reverse参数实现，这里先存储原值
+                    sort_values.append(name)
+                    
+                elif priority == 'device':
+                    # 测试设备排序
+                    device_id = test.get("device_id", "").lower()
+                    sort_values.append(device_id)
+                    
+                elif priority == 'chip_id':
+                    # 芯片ID排序
+                    test_info = test.get("test_info", {})
+                    metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
+                    chip_id = metadata.get("chip_id", "").lower()
+                    sort_values.append(chip_id)
+                    
+                elif priority == 'device_number':
+                    # 器件编号排序
+                    test_info = test.get("test_info", {})
+                    metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
+                    device_number = metadata.get("device_number", "").lower()
+                    sort_values.append(device_number)
+                    
+                elif priority == 'description':
+                    # 测试描述排序
+                    description = test.get("description", "").lower()
+                    sort_values.append(description)
             
-            # Return tuple based on sorting preference
-            if sort_text == "时间优先":
-                return (-timestamp,)  # Descending order (newest first)
-            elif sort_text == "设备名优先":
-                return (device_id.lower(), -timestamp)
-            elif sort_text == "芯片ID优先":
-                return (chip_id.lower(), -timestamp)
-            elif sort_text == "器件编号优先":
-                return (device_number.lower(), -timestamp)
-            elif sort_text == "时间+设备名":
-                return (-timestamp, device_id.lower())
-            elif sort_text == "时间+芯片ID":
-                return (-timestamp, chip_id.lower())
-            elif sort_text == "时间+器件编号":
-                return (-timestamp, device_number.lower())
-            elif sort_text == "设备名+时间":
-                return (device_id.lower(), -timestamp)
-            elif sort_text == "设备名+芯片ID":
-                return (device_id.lower(), chip_id.lower())
-            elif sort_text == "设备名+器件编号":
-                return (device_id.lower(), device_number.lower())
-            elif sort_text == "芯片ID+时间":
-                return (chip_id.lower(), -timestamp)
-            elif sort_text == "芯片ID+设备名":
-                return (chip_id.lower(), device_id.lower())
-            elif sort_text == "芯片ID+器件编号":
-                return (chip_id.lower(), device_number.lower())
-            elif sort_text == "器件编号+时间":
-                return (device_number.lower(), -timestamp)
-            elif sort_text == "器件编号+设备名":
-                return (device_number.lower(), device_id.lower())
-            elif sort_text == "器件编号+芯片ID":
-                return (device_number.lower(), chip_id.lower())
-            else:
-                return (-timestamp,)  # Default to time descending
+            return tuple(sort_values)
         
-        # Sort the tests
-        sorted_tests = sorted(tests, key=get_sort_key)
-        return sorted_tests
+        # 排序测试列表 - 需要处理混合的升降序
+        def multi_level_sort(tests):
+            """多级排序，支持每个字段独立的升降序"""
+            sorted_tests = tests[:]
+            
+            # 从最低优先级开始，逐级排序
+            for priority in reversed(self.sort_priorities):
+                is_ascending = self.sort_directions.get(priority, True)
+                
+                if priority == 'time':
+                    sorted_tests.sort(
+                        key=lambda t: self.get_time_value(t),
+                        reverse=not is_ascending
+                    )
+                elif priority == 'name':
+                    sorted_tests.sort(
+                        key=lambda t: t.get("name", "").lower(),
+                        reverse=not is_ascending
+                    )
+                elif priority == 'device':
+                    sorted_tests.sort(
+                        key=lambda t: t.get("device_id", "").lower(),
+                        reverse=not is_ascending
+                    )
+                elif priority == 'chip_id':
+                    sorted_tests.sort(
+                        key=lambda t: self.get_chip_id(t),
+                        reverse=not is_ascending
+                    )
+                elif priority == 'device_number':
+                    sorted_tests.sort(
+                        key=lambda t: self.get_device_number(t),
+                        reverse=not is_ascending
+                    )
+                elif priority == 'description':
+                    sorted_tests.sort(
+                        key=lambda t: t.get("description", "").lower(),
+                        reverse=not is_ascending
+                    )
+            
+            return sorted_tests
+        
+        return multi_level_sort(tests)
     
-    def on_sort_changed(self, sort_text):
-        """Handle sorting option change"""
-        # Refresh tests to apply new sorting
+    def get_time_value(self, test):
+        """获取测试的时间值"""
+        created_at = test.get("created_at", "")
+        if created_at:
+            try:
+                dt = datetime.fromisoformat(created_at)
+                return dt.timestamp()
+            except:
+                return 0
+        return 0
+    
+    def get_chip_id(self, test):
+        """获取芯片ID"""
+        test_info = test.get("test_info", {})
+        metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
+        return metadata.get("chip_id", "").lower()
+    
+    def get_device_number(self, test):
+        """获取器件编号"""
+        test_info = test.get("test_info", {})
+        metadata = test_info.get("metadata", {}) if isinstance(test_info, dict) else {}
+        return metadata.get("device_number", "").lower()
+    
+    def on_sort_order_changed(self, new_order):
+        """处理拖拽排序顺序变化"""
+        self.sort_priorities = new_order
+        # 刷新测试列表应用新的排序
+        self.refresh_tests()
+    
+    def on_sort_config_changed(self, config):
+        """处理完整的排序配置变化（包括升降序）"""
+        self.sort_priorities = config.get('order', self.sort_priorities)
+        self.sort_directions = config.get('directions', self.sort_directions)
+        # 刷新测试列表应用新的排序
         self.refresh_tests()

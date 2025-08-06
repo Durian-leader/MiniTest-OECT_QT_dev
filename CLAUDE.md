@@ -109,6 +109,9 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
   - Device list displays in alphabetical order (A-Z) by device ID
 - **Test History**: `qt_app/widgets/test_history.py` - Data analysis and export
   - Displays test metadata including chip ID and device number
+  - Advanced drag-and-drop sorting with 6 criteria: time, name, device, chip ID, device number, description
+  - Click sorting blocks to toggle ascending/descending order
+  - Visual feedback with color-coded blocks (blue for ascending, orange for descending)
 - **Real-time Plot**: `qt_app/widgets/realtime_plot.py` - Live data visualization
 - **Workflow Editor**: `qt_app/widgets/workflow_editor.py` - Complex test sequence configuration
 
