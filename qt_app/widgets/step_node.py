@@ -457,6 +457,7 @@ class StepNodeWidget(QWidget):
                 )
                 child_widget.step_updated.connect(self.on_params_updated)
                 child_widget.step_removed.connect(lambda idx=i: self.remove_child_step(idx))
+                child_widget.step_move_requested.connect(lambda from_idx, to_idx, idx=i: self.move_child_step(from_idx, to_idx))
                 
                 self.children_layout.addWidget(child_widget)
                 self.child_widgets.append(child_widget)
@@ -475,6 +476,32 @@ class StepNodeWidget(QWidget):
         if 0 <= index < len(self.step["steps"]):
             # Remove step from list
             del self.step["steps"][index]
+            
+            # Refresh UI
+            self.refresh_child_steps()
+            
+            # Emit signal for update
+            self.step_updated.emit()
+    
+    def move_child_step(self, from_index, to_index):
+        """Move a child step from one position to another"""
+        if self.step.get("type") != "loop" or "steps" not in self.step:
+            return
+        
+        child_steps = self.step["steps"]
+        if (0 <= from_index < len(child_steps) and 
+            0 <= to_index < len(child_steps) and 
+            from_index != to_index):
+            
+            # Remove step from original position
+            step = child_steps.pop(from_index)
+            
+            # Adjust target index if necessary
+            if from_index < to_index:
+                to_index -= 1
+            
+            # Insert at new position
+            child_steps.insert(to_index, step)
             
             # Refresh UI
             self.refresh_child_steps()
@@ -503,7 +530,8 @@ class StepNodeWidget(QWidget):
         # Start drag operation
         drag = QDrag(self)
         mime_data = QMimeData()
-        mime_data.setText(f"step_move:{self.index}")
+        # Include depth information to ensure dragging only within same level
+        mime_data.setText(f"step_move:{self.index}:{self.depth}")
         drag.setMimeData(mime_data)
         
         # Create drag pixmap
@@ -525,24 +553,57 @@ class StepNodeWidget(QWidget):
     def dragEnterEvent(self, event):
         """Handle drag enter"""
         if event.mimeData().hasText() and event.mimeData().text().startswith("step_move:"):
-            event.acceptProposedAction()
+            # Check if drag is from the same depth level
+            source_text = event.mimeData().text()
+            try:
+                parts = source_text.split(":")
+                if len(parts) >= 3:
+                    source_depth = int(parts[2])
+                    if source_depth == self.depth:
+                        event.acceptProposedAction()
+                        return
+            except (ValueError, IndexError):
+                pass
+        
+        # Reject if not same level or invalid format
+        event.ignore()
     
     def dragMoveEvent(self, event):
         """Handle drag move"""
         if event.mimeData().hasText() and event.mimeData().text().startswith("step_move:"):
-            event.acceptProposedAction()
+            # Check if drag is from the same depth level
+            source_text = event.mimeData().text()
+            try:
+                parts = source_text.split(":")
+                if len(parts) >= 3:
+                    source_depth = int(parts[2])
+                    if source_depth == self.depth:
+                        event.acceptProposedAction()
+                        return
+            except (ValueError, IndexError):
+                pass
+        
+        # Reject if not same level or invalid format
+        event.ignore()
     
     def dropEvent(self, event):
         """Handle drop event"""
         if event.mimeData().hasText() and event.mimeData().text().startswith("step_move:"):
             source_text = event.mimeData().text()
             try:
-                from_index = int(source_text.split(":")[1])
-                to_index = self.index
-                
-                if from_index != to_index:
-                    self.step_move_requested.emit(from_index, to_index)
-                
-                event.acceptProposedAction()
+                parts = source_text.split(":")
+                if len(parts) >= 3:
+                    from_index = int(parts[1])
+                    source_depth = int(parts[2])
+                    to_index = self.index
+                    
+                    # Only allow drops within the same depth level
+                    if source_depth == self.depth and from_index != to_index:
+                        self.step_move_requested.emit(from_index, to_index)
+                        event.acceptProposedAction()
+                        return
             except (ValueError, IndexError):
                 pass
+        
+        # Reject invalid drops
+        event.ignore()
