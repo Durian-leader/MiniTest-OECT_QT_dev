@@ -1,222 +1,324 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件为 Claude Code (claude.ai/code) 提供项目开发指导。
 
-## Development Commands
+## 项目概述
 
-### Running the Application
+MiniTest-OECT 是一个用于有机电化学晶体管 (OECT) 电学特性测试的专业测试系统。采用 PyQt5 + 多进程架构，支持高速数据采集、实时可视化和复杂工作流编排。
+
+## 系统架构
+
+### 多进程设计
+```
+Qt进程 (UI) ↔ 测试进程 ↔ 数据传输进程 ↔ 数据保存进程
+```
+
+**进程职责：**
+- **Qt进程**: PyQt5界面、实时绘图、用户交互
+- **测试进程**: 设备通信、测试执行、工作流控制
+- **数据传输进程**: 数据路由、批处理、格式转换
+- **数据保存进程**: 文件I/O、CSV/JSON持久化
+
+### 目录结构
+```
+MiniTest-OECT_QT_dev/
+├── qt_app/                      # PyQt5前端
+│   ├── main_window.py          # 主窗口
+│   └── widgets/                # UI组件
+│       ├── device_control.py   # 设备控制
+│       ├── test_history.py     # 历史查看
+│       ├── realtime_plot.py    # 实时绘图
+│       └── workflow_editor.py  # 工作流编辑
+├── backend_device_control_pyqt/  # 后端系统
+│   ├── main.py                 # 后端入口
+│   ├── processes/              # 进程实现
+│   ├── core/                   # 核心功能
+│   └── test/                   # 测试类型
+├── UserData/AutoSave/          # 测试数据
+├── logs/                       # 日志文件
+└── logger_config.py            # 日志配置
+```
+
+## 开发命令
+
+### 运行应用
 ```bash
-# Development mode - run from source
+# 开发模式 - 从源码运行
 python run_qt.py
 
-# Production mode - run packaged version  
+# 生产模式 - 打包版本
 python run_qt_for_exe.py
 
-# macOS version
+# macOS版本
 python run_qt_for_macapp.py
 ```
 
-### Building Executables
+### 构建可执行文件
 ```bash
-# Install packaging dependencies
-pip install pyinstaller
-
-# Build Windows executable
-pyinstaller --onefile --windowed --icon=my_icon.ico run_qt_for_exe.py
-
-# Build with spec file for Windows
+# Windows可执行文件
 pyinstaller run_qt_for_exe.spec
 
-# Build macOS app bundle  
+# macOS应用包
 pyinstaller run_qt_for_macapp.spec
+
+# 单文件打包
+pyinstaller --onefile --windowed --icon=my_icon.ico run_qt_for_exe.py
 ```
 
-### Installing Dependencies
+### 测试和调试
 ```bash
-# Install all required packages
-pip install -r requirements.txt
+# 查看日志文件
+tail -f logs/qt_app.main_window.log
+tail -f logs/backend_device_control_pyqt.main.log
 
-# Key dependencies include:
-# - PyQt5 (GUI framework)
-# - numpy (numerical computing)
-# - pyqtgraph (plotting)
-# - pyserial, pyserial-asyncio (serial communication)
-# - pillow (image processing)
+# 调整日志级别（在logger_config.py中）
+log_manager.set_levels(
+    file_level=logging.DEBUG,     # 文件详细日志
+    console_level=logging.WARNING  # 控制台简洁输出
+)
 ```
 
-### Testing and Debugging
-```bash
-# Run with debug logging (modify logger_config.py)
-# Check logs in the logs/ directory
-# Each process creates its own log file with module-specific names:
-# - backend_device_control_pyqt.main.log (backend main)
-# - backend_device_control_pyqt.processes.test_process.log (device testing)
-# - backend_device_control_pyqt.processes.data_transmission_process.log (data processing)
-# - backend_device_control_pyqt.processes.data_save_process.log (file operations)
-# - qt_app.main_window.log (Qt main window)
-# - qt_app.widgets.device_control.log (device control widget)
-# - qt_app.widgets.test_history.log (test history widget)
-# - qt_app.widgets.realtime_plot.log (real-time plotting)
+## 核心功能模块
+
+### 测试类型
+
+#### Transfer测试（转移特性）
+- **用途**: 测量栅极电压扫描下的漏极电流
+- **数据格式**: CSV (Vg, Id)
+- **关键参数**: gateVoltageStart/End/Step, drainVoltage
+- **实现**: `backend_device_control_pyqt/test/transfer_step.py`
+
+#### Transient测试（瞬态响应）
+- **用途**: 测量时域响应特性
+- **数据格式**: CSV (Time, Id)
+- **关键参数**: bottomTime, topTime, gateVoltageBottom/Top, cycles
+- **实现**: `backend_device_control_pyqt/test/transient_step.py`
+
+#### Output测试（输出特性）
+- **用途**: 多栅压下的I-V曲线
+- **数据格式**: CSV (Vd, Id_Vg1, Id_Vg2, ...)
+- **关键参数**: drainVoltageStart/End/Step, gateVoltage
+- **实现**: `backend_device_control_pyqt/test/output_step.py`
+
+### 设备通信
+
+#### 串口协议
+- **波特率**: 512000（默认）
+- **数据格式**: TLV协议（Type-Length-Value）
+- **命令结构**: `[0xFF][Type][Length][Value][0xFE]`
+- **16字节前缀**: 用于对齐和同步
+- **结束序列**: 每种测试类型特定的结束标记
+
+#### 异步通信
+```python
+# backend_device_control_pyqt/core/async_serial.py
+async def send_and_receive_command(
+    command: str,
+    end_sequences: Dict[str, str],
+    packet_size: int,
+    data_callback: Optional[Callable] = None,
+    progress_callback: Optional[Callable] = None
+)
 ```
 
-## System Architecture
+### 工作流系统
 
-### Multi-Process Design
-The application uses a 4-process architecture for high performance and stability:
-
-1. **Main Process (PyQt)** - `qt_app/main_window.py`
-   - User interface and event handling
-   - Manages backend communication
-   - Real-time data visualization
-
-2. **Test Process** - `backend_device_control_pyqt/processes/test_process.py`
-   - Device connection and control
-   - Test execution and workflow orchestration
-   - Serial communication management
-
-3. **Data Transmission Process** - `backend_device_control_pyqt/processes/data_transmission_process.py`
-   - Real-time data processing and routing
-   - Batch processing optimization
-   - Message distribution between processes
-
-4. **Data Save Process** - `backend_device_control_pyqt/processes/data_save_process.py`
-   - File I/O operations
-   - CSV data saving
-   - Multi-threaded write operations
-
-### Communication Flow
-```
-Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
-     ↑                            ↓
-     └─── Real-time Data ────────┘
+#### 工作流结构
+```python
+workflow = {
+    "steps": [
+        {"type": "transfer", "params": {...}},
+        {"type": "loop", "iterations": 3, "steps": [
+            {"type": "transient", "params": {...}}
+        ]},
+        {"type": "output", "params": {...}}
+    ]
+}
 ```
 
-### Key Components
+#### 状态管理
+- 每个设备独立的测试信息
+- 工作流配置按设备保存
+- 支持导入/导出工作流（JSON格式）
+- 导入模式：追加而非覆盖
 
-#### Backend System
-- **Entry Point**: `backend_device_control_pyqt/main.py` - `MedicalTestBackend` class
-- **Process Management**: Uses multiprocessing.Queue for inter-process communication with spawn method
-- **Device Communication**: `backend_device_control_pyqt/core/async_serial.py` for async serial I/O
-- **Data Bridge**: `backend_device_control_pyqt/comunication/data_bridge.py` for communication abstraction
-- **IPC Utilities**: `backend_device_control_pyqt/utils/ipc.py` for inter-process communication helpers
+### 数据管理
 
-#### Test Types
-- **Transfer Step**: `backend_device_control_pyqt/test/transfer_step.py` - Gate voltage sweeps
-- **Transient Step**: `backend_device_control_pyqt/test/transient_step.py` - Time-domain response
-- **Output Step**: `backend_device_control_pyqt/test/output_step.py` - Multi-gate voltage I-V curves
-- **Base Class**: `backend_device_control_pyqt/test/step.py` - Common test step interface
+#### 文件组织
+```
+UserData/AutoSave/
+└── {device_id}/
+    └── {timestamp}_{test_type}_{test_id}/
+        ├── test_info.json      # 测试元数据
+        ├── workflow.json       # 工作流配置
+        ├── 1_transfer.csv      # 测试数据
+        └── 2_transient.csv     # 测试数据
+```
 
-#### Frontend Components
-- **Main Window**: `qt_app/main_window.py` - Application entry point and tab management
-  - Handles tab switching with state preservation for device control
-  - Manages backend communication and status display
-- **Device Control**: `qt_app/widgets/device_control.py` - Test configuration and execution
-  - Test information input: name, description, chip ID, device number
-  - **Per-device state management**: Each device maintains separate test information settings
-  - Integrated workflow controls: start/stop test, import/export workflows
-  - Workflow import appends to current workflow instead of overwriting
-  - Enhanced UI styling with clear input fields and color-coded buttons
-  - Device list displays in alphabetical order (A-Z) by device ID
-- **Test History**: `qt_app/widgets/test_history.py` - Data analysis and export
-  - Displays test metadata including chip ID and device number
-  - Advanced drag-and-drop sorting with 6 criteria: time, name, device, chip ID, device number, description
-  - Click sorting blocks to toggle ascending/descending order
-  - Visual feedback with color-coded blocks (blue for ascending, orange for descending)
-- **Real-time Plot**: `qt_app/widgets/realtime_plot.py` - Live data visualization using pyqtgraph
-- **Workflow Editor**: `qt_app/widgets/workflow_editor.py` - Complex test sequence configuration
-- **Custom Widgets**: `qt_app/widgets/custom_widgets.py` - Reusable UI components
-- **Step Node**: `qt_app/widgets/step_node.py` - Workflow step visualization
-- **Step Params Form**: `qt_app/widgets/step_params_form.py` - Parameter input forms for test steps
+#### 测试元数据
+```json
+{
+    "test_id": "uuid",
+    "test_name": "测试名称",
+    "test_description": "描述",
+    "chip_id": "芯片ID",
+    "device_number": "器件编号",
+    "device_id": "Test Unit A1",
+    "timestamp": "2025-01-01 10:00:00",
+    "workflow": {...}
+}
+```
 
-### Data Management
+## 常见开发任务
 
-#### File Structure
-- **Test Data**: Saved to `UserData/AutoSave/{device_id}/{timestamp}_{test_type}_{test_id}/`
-- **Log Files**: Created in `logs/` directory with automatic rotation
-- **Configuration**: Qt settings stored via QSettings
+### 添加新测试类型
 
-#### Data Formats
-- **Transfer Test**: CSV with columns Vg (gate voltage), Id (drain current)
-- **Transient Test**: CSV with columns Time, Id (drain current)  
-- **Output Test**: CSV with Vd (drain voltage) and multiple Id columns for different gate voltages
-- **Test Metadata**: JSON files with test parameters and configuration, including:
-  - Test name and description
-  - Chip ID and device number (optional fields for sample identification)
-  - Workflow parameters and device information
+1. **创建测试步骤类**（`backend_device_control_pyqt/test/`）:
+```python
+from backend_device_control_pyqt.test.step import TestStep
 
-### Device Communication
+class NewTestStep(TestStep):
+    def get_step_type(self) -> str:
+        return "new_test"
+    
+    def get_packet_size(self) -> int:
+        return 5  # 数据包大小
+    
+    def get_end_sequence(self) -> str:
+        return "FFFFFFFF"  # 结束标记
+    
+    async def execute(self):
+        # 实现测试逻辑
+        pass
+```
 
-#### Serial Protocol
-- **Baud Rate**: 512000 (default)
-- **Data Format**: Hexadecimal command/response protocol
-- **Device Detection**: Automatic device ID recognition
-- **Command Generation**: `backend_device_control_pyqt/core/command_gen.py`
-- **Data Parsing**: `backend_device_control_pyqt/core/serial_data_parser.py`
-- **Async Communication**: `backend_device_control_pyqt/core/async_serial.py`
+2. **添加命令生成**（`backend_device_control_pyqt/core/command_gen.py`）:
+```python
+def gen_new_test_cmd(params):
+    # 生成TLV格式命令
+    return command_bytes
+```
 
-### Workflow System
+3. **更新UI组件**:
+   - `qt_app/widgets/step_params_form.py`: 添加参数表单
+   - `qt_app/widgets/step_node.py`: 更新步骤类型下拉框
+   - `qt_app/widgets/realtime_plot.py`: 处理新数据类型
 
-#### Configuration
-- **Workflow Models**: `backend_device_control_pyqt/models/workflow_models.py`
-- **Execution Engine**: `backend_device_control_pyqt/test/test.py`
-- **Step Types**: Supports transfer, transient, output, and loop (for iterations)
-- **Nested Structures**: Complex workflows with loops and conditional execution
+4. **注册到测试进程**（`backend_device_control_pyqt/processes/test_process.py`）
 
-## Development Guidelines
+### 修改UI界面
 
-### Adding New Test Types
-1. Create new step class inheriting from `backend_device_control_pyqt/test/step.py`
-2. Implement required abstract methods (`get_step_type`, `execute`, etc.)
-3. Register in test process workflow system
-4. Add UI components in `qt_app/widgets/` as needed
-5. Update workflow models if new parameters are required
+#### 添加新标签页
+```python
+# qt_app/main_window.py
+def setup_ui(self):
+    self.new_widget = NewWidget(self.backend)
+    self.tab_widget.addTab(self.new_widget, "新功能")
+```
 
-### Modifying Data Processing
-- Data flows through the transmission process before saving
-- Modify `data_transmission_process.py` for real-time processing changes
-- Update `data_save_process.py` for file format changes
-- Consider backward compatibility with existing saved data
+#### 自定义控件样式
+```python
+widget.setStyleSheet("""
+    QWidget {
+        background-color: #2b2b2b;
+        color: white;
+    }
+    QPushButton:hover {
+        background-color: #424242;
+    }
+""")
+```
 
-### UI Customization  
-- Main window uses tabbed interface with splitter layouts
-- Real-time plotting uses pyqtgraph for performance
-- Custom widgets extend PyQt5 base classes
-- Style sheets defined inline or in widget constructors
+### 性能优化
 
-### Logging Configuration
-- Central logging management in `logger_config.py` with `LoggerManager` class
-- Each module gets independent log files named by module path
-- Configurable log levels and rotation settings (default 10MB per file, 5 backups)
-- Use `get_module_logger()` for consistent logging across modules
-- Logs are stored in `logs/` directory with automatic rotation
+#### 数据处理优化
+```python
+# backend_device_control_pyqt/processes/data_transmission_process.py
+DATA_BATCH_SIZE = 100  # 调整批处理大小
+BATCH_TIMEOUT = 0.01   # 调整超时时间
+```
 
-### Build and Distribution
-- PyInstaller used for creating executables
-- Spec files customize build process and include assets
-- Icon files (ico/icns) for different platforms
-- Consider dependencies when packaging (especially PyQt5 plugins)
+#### 绘图性能优化
+```python
+# qt_app/widgets/realtime_plot.py
+self.max_points = 10000     # 限制最大点数
+self.update_interval = 50   # 更新间隔(ms)
+```
 
-## Common Troubleshooting
+## 调试技巧
 
-### Process Communication Issues
-- Check queue timeouts in backend communication
-- Verify all processes start successfully (check logs)
-- Monitor system resources during high-throughput tests
+### 启用详细日志
+```python
+# 在需要调试的模块中
+from logger_config import get_module_logger
+logger = get_module_logger()
+logger.debug(f"Debug info: {data}")
+```
 
-### Device Connection Problems  
-- Verify serial port permissions and availability
-- Check device power and cable connections
-- Confirm correct baud rate and protocol settings
-- Use device manager to verify driver installation
+### 监控进程通信
+```python
+# 查看队列状态
+logger.info(f"Queue size: {queue.qsize()}")
+```
 
-### Data Loss or Corruption
-- Check available disk space for data saving
-- Verify file permissions in UserData directory
-- Monitor data save process logs for errors
-- Consider increasing queue sizes for high-frequency data
+### 串口调试
+```python
+# backend_device_control_pyqt/core/async_serial.py
+logger.debug(f"TX: {command.hex()}")
+logger.debug(f"RX: {data.hex()}")
+```
 
-### Performance Optimization
-- Adjust batch sizes in data transmission process
-- Monitor memory usage during long tests
-- Consider data decimation for display vs. storage
-- Tune timer intervals in Qt widgets for responsiveness
+## 性能指标
+
+- **数据采集率**: 1000+ 点/秒
+- **队列延迟**: < 10ms
+- **文件写入**: 10MB/s
+- **进程启动**: < 2秒
+- **内存使用**: < 500MB（典型测试）
+
+## 故障排除
+
+### 进程启动失败
+- 检查Python环境和依赖
+- 查看logs/目录下的错误日志
+- 确认端口权限（串口访问）
+
+### 设备连接问题
+- 验证串口驱动安装
+- 检查设备电源和连接
+- 确认波特率设置（512000）
+
+### 数据丢失
+- 增加批处理大小
+- 调整队列超时时间
+- 检查磁盘空间
+
+### UI响应缓慢
+- 减少绘图点数
+- 增加更新间隔
+- 启用数据抽样
+
+## 安全注意事项
+
+- 不记录敏感信息到日志
+- 验证所有用户输入
+- 文件路径防止目录遍历
+- 避免使用pickle序列化
+
+## 代码规范
+
+- **命名**: 方法用snake_case，类用CamelCase
+- **信号**: 命名为`action_performed`（过去式）
+- **槽函数**: 命名为`on_action`或`handle_action`
+- **私有方法**: 前缀下划线`_method_name`
+- **常量**: 模块级用UPPER_CASE
+- **类型提示**: 所有公共函数添加类型注解
+- **文档字符串**: 所有公共方法添加docstring
+
+## 维护注意事项
+
+- 定期清理UserData/AutoSave/下的旧数据
+- 日志文件自动轮转（5MB/文件，保留5个）
+- 测试不同分辨率屏幕的UI显示
+- 保持工作流格式向后兼容
+- 更新依赖时注意PyQt5版本兼容性

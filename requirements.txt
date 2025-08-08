@@ -1,10 +1,50 @@
-PyQt5
-numpy
-pyqtgraph
-pyserial
-pyserial-asyncio
-logging
+# Core Dependencies
+# -----------------
+PyQt5>=5.15.0,<6.0.0        # GUI框架
+numpy>=1.19.0               # 数值计算
+pyqtgraph>=0.12.0          # 高性能绘图库
+pydantic>=2.0.0            # 数据验证和模型
 
-# 用于打包
-pillow
-pyinstaller
+# Serial Communication
+# --------------------
+pyserial>=3.5              # 串口通信
+pyserial-asyncio>=0.6      # 异步串口通信
+
+# Development Tools
+# -----------------
+pyinstaller>=5.0           # 打包工具（可选）
+pillow>=9.0.0             # 图像处理（图标转换）
+
+# Standard Library Extensions
+# ---------------------------
+# 以下模块为Python标准库，无需安装
+# - logging（日志系统）
+# - multiprocessing（多进程）
+# - asyncio（异步I/O）
+# - json（数据序列化）
+# - csv（数据导出）
+# - uuid（唯一标识符）
+# - datetime（时间处理）
+# - pathlib（路径操作）
+
+# Platform-Specific Dependencies
+# ------------------------------
+# Windows: 可能需要安装Visual C++ Redistributable
+# macOS: 需要Xcode Command Line Tools
+# Linux: 需要python3-dev包
+
+# Optional Dependencies for Development
+# -------------------------------------
+# pytest>=7.0.0            # 单元测试
+# pytest-asyncio>=0.21.0   # 异步测试
+# black>=22.0.0           # 代码格式化
+# flake8>=5.0.0           # 代码检查
+# mypy>=1.0.0             # 类型检查
+
+# Version Notes
+# -------------
+# - PyQt5: 使用5.x版本，不兼容PyQt6
+# - Python: 需要3.8或更高版本
+# - numpy: 用于高效数值计算
+# - pyqtgraph: 基于Qt的高性能科学绘图
+# - pydantic: 用于工作流模型验证
