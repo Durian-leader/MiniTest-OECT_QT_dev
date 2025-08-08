@@ -48,11 +48,15 @@ pip install -r requirements.txt
 ```bash
 # Run with debug logging (modify logger_config.py)
 # Check logs in the logs/ directory
-# Each process creates its own log file:
-# - main.log (main process)
-# - test_process.log (device testing)
-# - data_transmission.log (data processing) 
-# - data_save.log (file operations)
+# Each process creates its own log file with module-specific names:
+# - backend_device_control_pyqt.main.log (backend main)
+# - backend_device_control_pyqt.processes.test_process.log (device testing)
+# - backend_device_control_pyqt.processes.data_transmission_process.log (data processing)
+# - backend_device_control_pyqt.processes.data_save_process.log (file operations)
+# - qt_app.main_window.log (Qt main window)
+# - qt_app.widgets.device_control.log (device control widget)
+# - qt_app.widgets.test_history.log (test history widget)
+# - qt_app.widgets.realtime_plot.log (real-time plotting)
 ```
 
 ## System Architecture
@@ -91,8 +95,10 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 
 #### Backend System
 - **Entry Point**: `backend_device_control_pyqt/main.py` - `MedicalTestBackend` class
-- **Process Management**: Uses multiprocessing.Queue for inter-process communication
+- **Process Management**: Uses multiprocessing.Queue for inter-process communication with spawn method
 - **Device Communication**: `backend_device_control_pyqt/core/async_serial.py` for async serial I/O
+- **Data Bridge**: `backend_device_control_pyqt/comunication/data_bridge.py` for communication abstraction
+- **IPC Utilities**: `backend_device_control_pyqt/utils/ipc.py` for inter-process communication helpers
 
 #### Test Types
 - **Transfer Step**: `backend_device_control_pyqt/test/transfer_step.py` - Gate voltage sweeps
@@ -102,6 +108,8 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 
 #### Frontend Components
 - **Main Window**: `qt_app/main_window.py` - Application entry point and tab management
+  - Handles tab switching with state preservation for device control
+  - Manages backend communication and status display
 - **Device Control**: `qt_app/widgets/device_control.py` - Test configuration and execution
   - Test information input: name, description, chip ID, device number
   - **Per-device state management**: Each device maintains separate test information settings
@@ -114,8 +122,11 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
   - Advanced drag-and-drop sorting with 6 criteria: time, name, device, chip ID, device number, description
   - Click sorting blocks to toggle ascending/descending order
   - Visual feedback with color-coded blocks (blue for ascending, orange for descending)
-- **Real-time Plot**: `qt_app/widgets/realtime_plot.py` - Live data visualization
+- **Real-time Plot**: `qt_app/widgets/realtime_plot.py` - Live data visualization using pyqtgraph
 - **Workflow Editor**: `qt_app/widgets/workflow_editor.py` - Complex test sequence configuration
+- **Custom Widgets**: `qt_app/widgets/custom_widgets.py` - Reusable UI components
+- **Step Node**: `qt_app/widgets/step_node.py` - Workflow step visualization
+- **Step Params Form**: `qt_app/widgets/step_params_form.py` - Parameter input forms for test steps
 
 ### Data Management
 
@@ -141,6 +152,7 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 - **Device Detection**: Automatic device ID recognition
 - **Command Generation**: `backend_device_control_pyqt/core/command_gen.py`
 - **Data Parsing**: `backend_device_control_pyqt/core/serial_data_parser.py`
+- **Async Communication**: `backend_device_control_pyqt/core/async_serial.py`
 
 ### Workflow System
 
@@ -172,10 +184,11 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 - Style sheets defined inline or in widget constructors
 
 ### Logging Configuration
-- Central logging management in `logger_config.py`
-- Each process gets independent log files
-- Configurable log levels and rotation settings
+- Central logging management in `logger_config.py` with `LoggerManager` class
+- Each module gets independent log files named by module path
+- Configurable log levels and rotation settings (default 10MB per file, 5 backups)
 - Use `get_module_logger()` for consistent logging across modules
+- Logs are stored in `logs/` directory with automatic rotation
 
 ### Build and Distribution
 - PyInstaller used for creating executables
