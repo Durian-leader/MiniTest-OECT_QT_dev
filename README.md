@@ -141,7 +141,15 @@ MiniTest-OECT_QT_dev/
 3. 更新UI组件以支持新测试类型
 4. 在测试进程中注册新测试类型
 
-详细开发文档请参见 [CLAUDE.md](CLAUDE.md)
+### 📚 详细文档
+
+- **主项目开发指南**: [CLAUDE.md](CLAUDE.md) - Claude Code AI开发助手指南
+- **前端模块文档**: 
+  - [qt_app/README.md](qt_app/README.md) - Qt前端详细说明
+  - [qt_app/CLAUDE.md](qt_app/CLAUDE.md) - Qt前端AI开发指南
+- **后端模块文档**: 
+  - [backend_device_control_pyqt/README.md](backend_device_control_pyqt/README.md) - 后端系统详细说明
+  - [backend_device_control_pyqt/CLAUDE.md](backend_device_control_pyqt/CLAUDE.md) - 后端系统AI开发指南
 
 ## 📊 性能指标
 

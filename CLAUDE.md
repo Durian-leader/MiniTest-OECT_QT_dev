@@ -322,3 +322,29 @@ logger.debug(f"RX: {data.hex()}")
 - 测试不同分辨率屏幕的UI显示
 - 保持工作流格式向后兼容
 - 更新依赖时注意PyQt5版本兼容性
+
+## 📚 模块文档链接
+
+### 前端模块 (qt_app)
+- **[qt_app/README.md](qt_app/README.md)** - Qt前端模块详细说明
+  - 组件架构和功能描述
+  - 界面布局和交互设计
+  - 数据流和消息处理
+  - 使用示例和配置说明
+- **[qt_app/CLAUDE.md](qt_app/CLAUDE.md)** - Qt前端AI开发指南
+  - 常见开发任务指导
+  - 关键文件和函数说明
+  - 信号槽连接模式
+  - 性能优化建议
+
+### 后端模块 (backend_device_control_pyqt)
+- **[backend_device_control_pyqt/README.md](backend_device_control_pyqt/README.md)** - 后端系统详细说明
+  - 四进程架构设计
+  - 设备通信协议
+  - 测试类型实现
+  - API参考文档
+- **[backend_device_control_pyqt/CLAUDE.md](backend_device_control_pyqt/CLAUDE.md)** - 后端AI开发指南
+  - 添加新测试类型步骤
+  - 数据处理流程修改
+  - 性能调优参数
+  - 调试和故障排除
