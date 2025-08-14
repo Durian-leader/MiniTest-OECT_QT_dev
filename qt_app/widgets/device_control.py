@@ -642,8 +642,17 @@ class DeviceControlWidget(QWidget):
         # In sync mode, all devices use the same workflow
         if self.sync_workflow_enabled:
             # Use the current workflow for all devices
-            if not hasattr(self, '_sync_workflow'):
-                self._sync_workflow = self.workflow_editor.get_steps()
+            if not hasattr(self, '_sync_workflow') or not self._sync_workflow:
+                # If no sync workflow exists, use the first device's workflow or current editor content
+                if any(self.workflows.values()):
+                    # Use the first non-empty workflow found
+                    for wf in self.workflows.values():
+                        if wf:
+                            self._sync_workflow = wf.copy()
+                            break
+                else:
+                    # Use current editor content
+                    self._sync_workflow = self.workflow_editor.get_steps()
             self.workflow_editor.set_steps(self._sync_workflow)
         else:
             if port not in self.workflows:
@@ -884,16 +893,30 @@ class DeviceControlWidget(QWidget):
             # Get device-specific test info
             device_id = device_info.get('device_id', port)
             
-            # Generate test name
-            if self.auto_naming:
-                timestamp = time.strftime('%Y%m%d%H%M%S')
-                test_name = f"{device_id}_{timestamp}"
+            # Get device-specific test information
+            if port in self.test_info:
+                device_test_info = self.test_info[port]
+                # Use device-specific test name
+                if device_test_info.get('auto_naming', True):
+                    timestamp = time.strftime('%Y%m%d%H%M%S')
+                    test_name = f"{device_id}_{timestamp}"
+                else:
+                    test_name = device_test_info.get('test_name', '') or f"测试-{device_id}"
+                
+                # Use device-specific information
+                test_description = device_test_info.get('test_desc', '')
+                chip_id = device_test_info.get('chip_id', '')
+                device_number = device_test_info.get('device_number', '')
             else:
-                test_name = self.test_name_edit.text().strip() or f"测试-{device_id}"
-            
-            test_description = self.test_desc_edit.text().strip()
-            chip_id = self.chip_id_edit.text().strip()
-            device_number = self.device_number_edit.text().strip()
+                # For devices without saved info, use empty values (not current form values)
+                # Only generate auto name if needed
+                timestamp = time.strftime('%Y%m%d%H%M%S')
+                test_name = f"{device_id}_{timestamp}"  # Always auto-generate for unsaved devices
+                
+                # Keep these fields empty for devices without saved info
+                test_description = ''
+                chip_id = ''
+                device_number = ''
             
             # Prepare workflow parameters with sync flag
             params = {
