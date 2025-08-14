@@ -124,6 +124,10 @@ class DeviceControlWidget(QWidget):
         # Auto-naming setting
         self.auto_naming = True
         
+        # Sync workflow setting
+        self.sync_workflow_enabled = False
+        self.sync_test_ids = {}  # {device_port: test_id} for synchronized tests
+        
         # Data handling
         self.last_data_time = 0
         self.data_count = 0
@@ -267,6 +271,13 @@ class DeviceControlWidget(QWidget):
         self.auto_naming_check.toggled.connect(self.toggle_auto_naming)
         form_layout.addRow("", self.auto_naming_check)
         
+        # Sync workflow checkbox
+        self.sync_workflow_check = QCheckBox("所有设备同步执行工作流")
+        self.sync_workflow_check.setChecked(False)
+        self.sync_workflow_check.toggled.connect(self.toggle_sync_workflow)
+        self.sync_workflow_check.setToolTip("勾选后，所有设备将使用相同的工作流，并且每个步骤同步执行")
+        form_layout.addRow("", self.sync_workflow_check)
+        
         # Test name field with improved styling
         self.test_name_edit = QLineEdit()
         self.test_name_edit.setPlaceholderText("输入测试名称")
@@ -398,6 +409,30 @@ class DeviceControlWidget(QWidget):
                 # If enabling manual naming and no custom name exists, provide a default
                 self.test_name_edit.setText(f"测试-{self.selected_port}")
     
+    def toggle_sync_workflow(self, enabled):
+        """Toggle synchronized workflow execution"""
+        self.sync_workflow_enabled = enabled
+        
+        if enabled:
+            # When enabling sync mode, save current workflow for all devices
+            if self.selected_port:
+                self.save_current_workflow()
+                steps = self.workflow_editor.get_steps()
+                self._sync_workflow = steps.copy()  # Store the sync workflow
+                # Apply the same workflow to all devices
+                for i in range(self.device_list.count()):
+                    item = self.device_list.item(i)
+                    if item:
+                        port = item.data(Qt.UserRole)
+                        self.workflows[port] = steps.copy()
+            
+            logger.info("同步工作流模式已启用")
+        else:
+            # Clear sync workflow when disabling
+            if hasattr(self, '_sync_workflow'):
+                del self._sync_workflow
+            logger.info("同步工作流模式已禁用")
+    
     def on_test_name_changed(self, text):
         """Handle manual changes to test name"""
         # If user is typing, disable auto-naming
@@ -414,6 +449,16 @@ class DeviceControlWidget(QWidget):
             # 保存当前工作流到字典中
             self.workflows[self.selected_port] = self.workflow_editor.get_steps()
             # 记录工作流被修改的标记
+            
+            # In sync mode, update all devices with the same workflow
+            if self.sync_workflow_enabled:
+                steps = self.workflow_editor.get_steps()
+                self._sync_workflow = steps.copy()  # Update sync workflow
+                for i in range(self.device_list.count()):
+                    item = self.device_list.item(i)
+                    if item:
+                        port = item.data(Qt.UserRole)
+                        self.workflows[port] = steps.copy()
             logger.info(f"已保存设备 {self.selected_port} 的工作流配置，共 {len(self.workflows[self.selected_port])} 个步骤")
     
     def save_current_workflow(self):
@@ -594,10 +639,16 @@ class DeviceControlWidget(QWidget):
         self.device_info.setText(info_text)
         
         # Update workflow editor with device-specific workflow
-        if port not in self.workflows:
-            self.workflows[port] = []
-        
-        self.workflow_editor.set_steps(self.workflows[port])
+        # In sync mode, all devices use the same workflow
+        if self.sync_workflow_enabled:
+            # Use the current workflow for all devices
+            if not hasattr(self, '_sync_workflow'):
+                self._sync_workflow = self.workflow_editor.get_steps()
+            self.workflow_editor.set_steps(self._sync_workflow)
+        else:
+            if port not in self.workflows:
+                self.workflows[port] = []
+            self.workflow_editor.set_steps(self.workflows[port])
         
         # Load device-specific test information
         self.load_test_info_for_device(port)
@@ -625,6 +676,11 @@ class DeviceControlWidget(QWidget):
     
     def start_workflow(self):
         """Start workflow for the selected device"""
+        # Check if sync mode is enabled
+        if self.sync_workflow_enabled:
+            self.start_sync_workflow()
+            return
+            
         if not self.selected_port:
             QMessageBox.warning(self, "Warning", "请先选择一个设备")
             return
@@ -769,8 +825,181 @@ class DeviceControlWidget(QWidget):
         
         except Exception as e:
             QMessageBox.critical(self, "Error", f"启动测试时发生错误: {str(e)}")
+    def start_sync_workflow(self):
+        """Start synchronized workflow for all devices"""
+        # Get workflow steps
+        steps = self.workflow_editor.get_steps()
+        if not steps:
+            QMessageBox.warning(self, "Warning", "请先配置工作流步骤")
+            return
+        
+        # Get all available devices
+        available_devices = []
+        for i in range(self.device_list.count()):
+            item = self.device_list.item(i)
+            if item:
+                port = item.data(Qt.UserRole)
+                device_info = item.data(Qt.UserRole + 1)
+                
+                # Check if device is already testing
+                if port in self.current_test_ids:
+                    device_name = device_info.get('device_id', port) if device_info else port
+                    reply = QMessageBox.question(
+                        self, 
+                        "设备正在测试中", 
+                        f"部分设备正在进行测试，是否停止所有测试并开始同步测试？", 
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No
+                    )
+                    
+                    if reply == QMessageBox.Yes:
+                        # Stop all current tests
+                        self.stop_sync_workflow()
+                        # Wait for stop to complete
+                        QTimer.singleShot(500, lambda: self.start_sync_workflow())
+                        return
+                    else:
+                        return
+                
+                available_devices.append((port, device_info))
+        
+        if not available_devices:
+            QMessageBox.warning(self, "Warning", "没有可用的设备")
+            return
+        
+        # Clear sync test IDs
+        self.sync_test_ids.clear()
+        
+        # Generate a batch ID for all synchronized tests
+        batch_id = f"batch_{time.strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:8]}"
+        
+        # Start workflow for each device
+        success_count = 0
+        failed_devices = []
+        
+        for port, device_info in available_devices:
+            # Generate test ID for this device
+            test_id = f"test_{time.strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:8]}"
+            
+            # Get device-specific test info
+            device_id = device_info.get('device_id', port)
+            
+            # Generate test name
+            if self.auto_naming:
+                timestamp = time.strftime('%Y%m%d%H%M%S')
+                test_name = f"{device_id}_{timestamp}"
+            else:
+                test_name = self.test_name_edit.text().strip() or f"测试-{device_id}"
+            
+            test_description = self.test_desc_edit.text().strip()
+            chip_id = self.chip_id_edit.text().strip()
+            device_number = self.device_number_edit.text().strip()
+            
+            # Prepare workflow parameters with sync flag
+            params = {
+                "test_id": test_id,
+                "device_id": device_id,
+                "port": port,
+                "baudrate": 512000,
+                "name": test_name,
+                "description": test_description,
+                "chip_id": chip_id,
+                "device_number": device_number,
+                "steps": steps,
+                "sync_mode": True,  # Add sync mode flag
+                "batch_id": batch_id  # Add batch ID for synchronization
+            }
+            
+            try:
+                # Start workflow for this device
+                result = self.backend.start_workflow(params)
+                
+                if result.get("status") == "ok":
+                    # Store test ID
+                    self.current_test_ids[port] = test_id
+                    self.sync_test_ids[port] = test_id
+                    
+                    # Create or update plot widget
+                    if port not in self.plot_widgets:
+                        plot_widget = RealtimePlotWidget(port, test_id)
+                        self.plot_widgets[port] = plot_widget
+                        self.plot_layout.addWidget(plot_widget)
+                    else:
+                        self.plot_widgets[port].set_test_id(test_id)
+                    
+                    success_count += 1
+                else:
+                    failed_devices.append((device_id, result.get('reason', '未知错误')))
+            
+            except Exception as e:
+                failed_devices.append((device_id, str(e)))
+        
+        # Update plot visibility
+        self.update_plot_visibility()
+        
+        # Show results
+        if success_count > 0:
+            msg = f"已为 {success_count} 个设备启动同步测试"
+            if failed_devices:
+                msg += f"\n\n失败的设备:\n"
+                for device_id, reason in failed_devices:
+                    msg += f"- {device_id}: {reason}\n"
+            QMessageBox.information(self, "同步测试已启动", msg)
+        else:
+            QMessageBox.critical(self, "Error", "无法启动任何设备的测试")
+    
+    def stop_sync_workflow(self):
+        """Stop synchronized workflow for all devices"""
+        if not self.sync_test_ids:
+            # If no sync tests, stop all current tests
+            stopped_count = 0
+            for port in list(self.current_test_ids.keys()):
+                try:
+                    result = self.backend.stop_test(test_id=self.current_test_ids[port])
+                    if result.get("status") == "ok":
+                        # Update plot widget
+                        if port in self.plot_widgets:
+                            self.plot_widgets[port].set_test_completed()
+                        # Remove test ID
+                        del self.current_test_ids[port]
+                        stopped_count += 1
+                except:
+                    pass
+            
+            if stopped_count > 0:
+                QMessageBox.information(self, "Success", f"已停止 {stopped_count} 个设备的测试")
+            return
+        
+        # Stop all synchronized tests
+        stopped_count = 0
+        for port, test_id in list(self.sync_test_ids.items()):
+            try:
+                result = self.backend.stop_test(test_id=test_id)
+                if result.get("status") == "ok":
+                    # Update plot widget
+                    if port in self.plot_widgets:
+                        self.plot_widgets[port].set_test_completed()
+                    
+                    # Remove test IDs
+                    if port in self.current_test_ids:
+                        del self.current_test_ids[port]
+                    stopped_count += 1
+            except:
+                pass
+        
+        # Clear sync test IDs
+        self.sync_test_ids.clear()
+        
+        if stopped_count > 0:
+            QMessageBox.information(self, "Success", f"已停止 {stopped_count} 个设备的同步测试")
+    
     def stop_workflow(self):
         """Stop workflow for the selected device"""
+        # Check if sync mode is enabled
+        if self.sync_workflow_enabled:
+            self.stop_sync_workflow()
+            return
+            
         if not self.selected_port:
             QMessageBox.warning(self, "Warning", "请先选择一个设备")
             return

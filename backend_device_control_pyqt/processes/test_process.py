@@ -231,6 +231,11 @@ class TestManager:
         self.test_results = {}  # {test_id: result_dict}
         self.device_status = {}  # {device_id: status_dict}
         
+        # 同步执行相关
+        self.sync_batches = {}  # {batch_id: {test_id: device_id}}
+        self.sync_step_status = {}  # {batch_id: {step_index: {test_id: ready}}}
+        self.sync_locks = {}  # {batch_id: asyncio.Lock}
+        
         # 初始化自定义数据桥接器
         self.data_bridge = ProcessDataBridge(data_queue)
         
@@ -484,6 +489,8 @@ class TestManager:
         chip_id = params.get("chip_id", "")
         device_number = params.get("device_number", "")
         steps = params.get("steps", [])
+        sync_mode = params.get("sync_mode", False)
+        batch_id = params.get("batch_id", None)
         
         # 检查必要参数
         if not all([device_id, port, baudrate, test_id, steps]):
@@ -503,6 +510,15 @@ class TestManager:
         # 记录测试与设备的映射关系
         self.test_to_device[test_id] = device_id
         
+        # 如果是同步模式，注册到批次
+        if sync_mode and batch_id:
+            if batch_id not in self.sync_batches:
+                self.sync_batches[batch_id] = {}
+                self.sync_step_status[batch_id] = {}
+                self.sync_locks[batch_id] = asyncio.Lock()
+            self.sync_batches[batch_id][test_id] = device_id
+            logger.info(f"Test {test_id} registered to sync batch {batch_id}")
+        
         # 计算总步骤数
         total_steps = count_total_steps(steps)
         
@@ -519,7 +535,9 @@ class TestManager:
                 "raw_params": params,
                 "total_steps": total_steps,
                 "chip_id": chip_id,
-                "device_number": device_number
+                "device_number": device_number,
+                "sync_mode": sync_mode,
+                "batch_id": batch_id
             }
         )
         
@@ -527,7 +545,7 @@ class TestManager:
         self.test_data_cache[test_id] = {}
         
         # 处理工作流步骤
-        await self.process_workflow_steps(test, device, test_id, steps)
+        await self.process_workflow_steps(test, device, test_id, steps, sync_mode=sync_mode, batch_id=batch_id)
         
         # 添加到活跃测试列表
         self.active_tests[test_id] = test
@@ -544,7 +562,7 @@ class TestManager:
             "total_steps": total_steps
         }
     
-    async def process_workflow_steps(self, test, device, test_id, steps, iteration_info=None, current_path=None):
+    async def process_workflow_steps(self, test, device, test_id, steps, iteration_info=None, current_path=None, sync_mode=False, batch_id=None):
         """
         处理工作流中的步骤
         
@@ -555,6 +573,8 @@ class TestManager:
             steps: 步骤列表
             iteration_info: 循环信息(如果是循环中的步骤)
             current_path: 当前工作流路径 (用于跟踪嵌套路径)
+            sync_mode: 是否为同步模式
+            batch_id: 同步批次ID
         """
         # 初始化路径跟踪，如果未提供
         if current_path is None:
@@ -566,6 +586,10 @@ class TestManager:
             
             # 构建当前步骤的完整路径
             step_path = current_path + [current_position]
+            
+            # 如果是同步模式，在执行步骤前等待所有设备就绪
+            if sync_mode and batch_id:
+                await self.wait_for_sync(batch_id, test_id, i)
             
             # 根据步骤类型创建不同的测试步骤
             if step_type == "transfer":
@@ -655,8 +679,77 @@ class TestManager:
                     await self.process_workflow_steps(
                         test, device, test_id, loop_steps, 
                         current_iteration_info, 
-                        iteration_path
+                        iteration_path,
+                        sync_mode, 
+                        batch_id
                     )
+    
+    async def send_message_to_qt(self, message: Dict[str, Any]):
+        """
+        发送消息到Qt进程
+        
+        Args:
+            message: 要发送的消息字典
+        """
+        try:
+            self.qt_result_queue.put(message)
+        except Exception as e:
+            logger.error(f"Failed to send message to Qt: {e}")
+    
+    async def wait_for_sync(self, batch_id: str, test_id: str, step_index: int):
+        """
+        等待同批次所有设备到达同一步骤
+        
+        Args:
+            batch_id: 批次ID
+            test_id: 测试ID
+            step_index: 步骤索引
+        """
+        if batch_id not in self.sync_batches:
+            return
+        
+        async with self.sync_locks[batch_id]:
+            # 初始化步骤状态
+            if step_index not in self.sync_step_status[batch_id]:
+                self.sync_step_status[batch_id][step_index] = {}
+            
+            # 标记当前测试已就绪
+            self.sync_step_status[batch_id][step_index][test_id] = True
+            
+            # 获取批次中所有测试
+            batch_tests = self.sync_batches[batch_id]
+            
+            # 检查是否所有测试都已就绪
+            all_ready = all(
+                tid in self.sync_step_status[batch_id][step_index] and 
+                self.sync_step_status[batch_id][step_index][tid]
+                for tid in batch_tests.keys()
+            )
+            
+            logger.info(f"Sync status for batch {batch_id}, step {step_index}: "
+                       f"{len(self.sync_step_status[batch_id][step_index])}/{len(batch_tests)} ready")
+        
+        # 如果还有设备未就绪，等待
+        while not all_ready:
+            await asyncio.sleep(0.1)
+            
+            async with self.sync_locks[batch_id]:
+                # 重新检查状态
+                all_ready = all(
+                    tid in self.sync_step_status[batch_id][step_index] and 
+                    self.sync_step_status[batch_id][step_index][tid]
+                    for tid in batch_tests.keys()
+                )
+        
+        logger.info(f"All devices in batch {batch_id} ready for step {step_index}, proceeding")
+        
+        # 发送同步完成消息到Qt
+        await self.send_message_to_qt({
+            "type": "sync_step_ready",
+            "batch_id": batch_id,
+            "step_index": step_index,
+            "test_id": test_id
+        })
     
     async def stop_test(self, device_id: str = None, test_id: str = None) -> Dict[str, Any]:
         """
@@ -786,6 +879,18 @@ class TestManager:
                 # 清理测试数据缓存
                 if tid in self.test_data_cache:
                     del self.test_data_cache[tid]
+                
+                # 清理同步相关数据
+                for batch_id, batch_tests in list(self.sync_batches.items()):
+                    if tid in batch_tests:
+                        del batch_tests[tid]
+                        # 如果批次中没有测试了，清理整个批次
+                        if not batch_tests:
+                            del self.sync_batches[batch_id]
+                            if batch_id in self.sync_step_status:
+                                del self.sync_step_status[batch_id]
+                            if batch_id in self.sync_locks:
+                                del self.sync_locks[batch_id]
             
             # 检查设备是否不再被使用
             if not any(did == device_id for did in self.test_to_device.values()):
@@ -942,6 +1047,18 @@ class TestManager:
             # 清理测试数据缓存
             if test_id in self.test_data_cache:
                 del self.test_data_cache[test_id]
+            
+            # 清理同步相关数据
+            for batch_id, batch_tests in list(self.sync_batches.items()):
+                if test_id in batch_tests:
+                    del batch_tests[test_id]
+                    # 如果批次中没有测试了，清理整个批次
+                    if not batch_tests:
+                        del self.sync_batches[batch_id]
+                        if batch_id in self.sync_step_status:
+                            del self.sync_step_status[batch_id]
+                        if batch_id in self.sync_locks:
+                            del self.sync_locks[batch_id]
                 
             logger.info(f"测试 {test_id} 已清理")
     

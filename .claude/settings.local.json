@@ -5,6 +5,7 @@
       "Bash(python:*)",
       "Bash(rm:*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   }
 }
