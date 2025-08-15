@@ -27,6 +27,36 @@ Qt Process ↔ Test Process ↔ Data Transmission Process ↔ Data Save Process
 
 ## Common Development Tasks
 
+### Synchronized Test Execution
+
+When implementing synchronized test execution across multiple devices:
+
+1. **Sync Mode Architecture**:
+   - Tests with `sync_mode=True` in metadata will synchronize at each step
+   - Each test gets a `batch_id` to group synchronized tests
+   - Synchronization occurs at two points per step:
+     - Before execution: All devices wait to start together
+     - After execution: All devices wait for completion before next step
+
+2. **Implementation Details**:
+   ```python
+   # In Test class (test/test.py)
+   self.sync_mode = metadata.get('sync_mode', False)
+   self.batch_id = metadata.get('batch_id', None)
+   self.sync_callback = None  # Set by TestManager
+   
+   # In test execution loop
+   if self.sync_mode and self.sync_callback:
+       await self.sync_callback(batch_id, test_id, step_index)  # Before step
+       # Execute step
+       await self.sync_callback(batch_id, test_id, f"complete_{step_index}")  # After step
+   ```
+
+3. **TestManager Sync Support** (`processes/test_process.py`):
+   - Maintains `sync_batches`, `sync_step_status`, `sync_locks`
+   - `wait_for_sync_with_completion()` handles synchronization
+   - All devices in batch must reach sync point before proceeding
+
 ### Adding a New Test Type
 
 When asked to add a new test type, follow these steps:
