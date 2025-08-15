@@ -747,12 +747,8 @@ class TestManager:
         
         logger.info(f"All devices in batch {batch_id} ready at sync point {sync_key}, proceeding")
         
-        # 清理完成标记，准备下一步
-        if is_completion:
-            async with self.sync_locks[batch_id]:
-                # 清理本步骤的完成状态，为下一步做准备
-                if sync_key in self.sync_step_status[batch_id]:
-                    del self.sync_step_status[batch_id][sync_key]
+        # 注意：不要立即清理状态，因为其他设备可能还在检查
+        # 状态会在下一个同步点初始化时自然覆盖
     
     async def wait_for_sync(self, batch_id: str, test_id: str, step_index: int):
         """
@@ -1050,7 +1046,8 @@ class TestManager:
             logger.info(f"测试 {test_id} ({test.test_type}) 已完成，状态: {test_info.get('status', 'completed')}")
             
         except Exception as e:
-            logger.error(f"测试 {test_id} 执行失败: {str(e)}")
+            import traceback
+            logger.error(f"测试 {test_id} 执行失败: {str(e)}\n{traceback.format_exc()}")
             
             # 记录测试错误
             self.test_results[test_id] = {

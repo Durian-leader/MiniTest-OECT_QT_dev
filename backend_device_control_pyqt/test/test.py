@@ -92,28 +92,34 @@ class Test:
         completed_steps = 0
         
         for i, step in enumerate(self.steps):
-            # 在每个步骤开始前检查停止标志
-            if step.device._stop_event.is_set():
-                logger.info(f"Test {self.test_id} stopped at step {i+1}")
-                was_stopped = True
-                break
-            
-            # 如果是同步模式，等待所有设备到达此步骤
-            if self.sync_mode and self.sync_callback:
-                logger.info(f"Test {self.test_id} waiting for sync at step {i+1}")
-                await self.sync_callback(self.batch_id, self.test_id, i)
-                logger.info(f"Test {self.test_id} sync complete, executing step {i+1}")
+            try:
+                # 在每个步骤开始前检查停止标志
+                if step.device._stop_event.is_set():
+                    logger.info(f"Test {self.test_id} stopped at step {i+1}")
+                    was_stopped = True
+                    break
+                
+                # 如果是同步模式，等待所有设备到达此步骤
+                if self.sync_mode and self.sync_callback:
+                    logger.info(f"Test {self.test_id} waiting for sync at step {i+1}")
+                    await self.sync_callback(self.batch_id, self.test_id, i)
+                    logger.info(f"Test {self.test_id} sync complete, executing step {i+1}")
+                        
+                logger.info(f"Executing {step.get_step_type()} step {i+1} of test {self.test_id}")
+                        
+                # 执行步骤
+                data, reason = await step.execute()
+                completed_steps += 1
+                
+                # 如果是同步模式，等待所有设备完成此步骤
+                if self.sync_mode and self.sync_callback:
+                    logger.info(f"Test {self.test_id} completed step {i+1}, waiting for others")
+                    await self.sync_callback(self.batch_id, self.test_id, f"complete_{i}")
                     
-            logger.info(f"Executing {step.get_step_type()} step {i+1} of test {self.test_id}")
-                    
-            # 执行步骤
-            data, reason = await step.execute()
-            completed_steps += 1
-            
-            # 如果是同步模式，等待所有设备完成此步骤
-            if self.sync_mode and self.sync_callback:
-                logger.info(f"Test {self.test_id} completed step {i+1}, waiting for others")
-                await self.sync_callback(self.batch_id, self.test_id, f"complete_{i}")
+            except Exception as e:
+                logger.error(f"Error executing step {i+1} in test {self.test_id}: {e}")
+                # 继续抛出异常，让上层处理
+                raise
             
             # 检查步骤后是否设置了停止标志（步骤执行期间可能被设置）
             if step.device._stop_event.is_set():
