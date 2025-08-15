@@ -42,6 +42,11 @@ class Test:
         self.completed_at = None
         self.test_dir = None
         
+        # 同步执行相关
+        self.sync_mode = metadata.get('sync_mode', False) if metadata else False
+        self.batch_id = metadata.get('batch_id', None) if metadata else None
+        self.sync_callback = None  # 将由TestManager设置
+        
     def add_step(self, step: TestStep):
         """Add a step to the test sequence"""
         self.steps.append(step)
@@ -92,12 +97,23 @@ class Test:
                 logger.info(f"Test {self.test_id} stopped at step {i+1}")
                 was_stopped = True
                 break
+            
+            # 如果是同步模式，等待所有设备到达此步骤
+            if self.sync_mode and self.sync_callback:
+                logger.info(f"Test {self.test_id} waiting for sync at step {i+1}")
+                await self.sync_callback(self.batch_id, self.test_id, i)
+                logger.info(f"Test {self.test_id} sync complete, executing step {i+1}")
                     
             logger.info(f"Executing {step.get_step_type()} step {i+1} of test {self.test_id}")
                     
             # 执行步骤
             data, reason = await step.execute()
             completed_steps += 1
+            
+            # 如果是同步模式，等待所有设备完成此步骤
+            if self.sync_mode and self.sync_callback:
+                logger.info(f"Test {self.test_id} completed step {i+1}, waiting for others")
+                await self.sync_callback(self.batch_id, self.test_id, f"complete_{i}")
             
             # 检查步骤后是否设置了停止标志（步骤执行期间可能被设置）
             if step.device._stop_event.is_set():

@@ -587,10 +587,6 @@ class TestManager:
             # 构建当前步骤的完整路径
             step_path = current_path + [current_position]
             
-            # 如果是同步模式，在执行步骤前等待所有设备就绪
-            if sync_mode and batch_id:
-                await self.wait_for_sync(batch_id, test_id, i)
-            
             # 根据步骤类型创建不同的测试步骤
             if step_type == "transfer":
                 # 创建额外的工作流进度信息
@@ -695,6 +691,68 @@ class TestManager:
             self.qt_result_queue.put(message)
         except Exception as e:
             logger.error(f"Failed to send message to Qt: {e}")
+    
+    async def wait_for_sync_with_completion(self, batch_id: str, test_id: str, step_index):
+        """
+        增强的同步等待方法，支持步骤开始前和完成后的同步
+        
+        Args:
+            batch_id: 批次ID
+            test_id: 测试ID
+            step_index: 步骤索引或完成标记（如 "complete_0"）
+        """
+        if batch_id not in self.sync_batches:
+            return
+        
+        # 确定同步键
+        sync_key = step_index
+        is_completion = False
+        if isinstance(step_index, str) and step_index.startswith("complete_"):
+            is_completion = True
+            sync_key = step_index
+        
+        async with self.sync_locks[batch_id]:
+            # 初始化步骤状态
+            if sync_key not in self.sync_step_status[batch_id]:
+                self.sync_step_status[batch_id][sync_key] = {}
+            
+            # 标记当前测试已就绪
+            self.sync_step_status[batch_id][sync_key][test_id] = True
+            
+            # 获取批次中所有测试
+            batch_tests = self.sync_batches[batch_id]
+            
+            # 检查是否所有测试都已就绪
+            all_ready = all(
+                tid in self.sync_step_status[batch_id][sync_key] and 
+                self.sync_step_status[batch_id][sync_key][tid]
+                for tid in batch_tests.keys()
+            )
+            
+            status_type = "completion" if is_completion else "start"
+            logger.info(f"Sync status for batch {batch_id}, step {sync_key} ({status_type}): "
+                       f"{len(self.sync_step_status[batch_id][sync_key])}/{len(batch_tests)} ready")
+        
+        # 如果还有设备未就绪，等待
+        while not all_ready:
+            await asyncio.sleep(0.1)
+            
+            async with self.sync_locks[batch_id]:
+                # 重新检查状态
+                all_ready = all(
+                    tid in self.sync_step_status[batch_id][sync_key] and 
+                    self.sync_step_status[batch_id][sync_key][tid]
+                    for tid in batch_tests.keys()
+                )
+        
+        logger.info(f"All devices in batch {batch_id} ready at sync point {sync_key}, proceeding")
+        
+        # 清理完成标记，准备下一步
+        if is_completion:
+            async with self.sync_locks[batch_id]:
+                # 清理本步骤的完成状态，为下一步做准备
+                if sync_key in self.sync_step_status[batch_id]:
+                    del self.sync_step_status[batch_id][sync_key]
     
     async def wait_for_sync(self, batch_id: str, test_id: str, step_index: int):
         """
@@ -928,6 +986,10 @@ class TestManager:
         """
         test_id = test.test_id
         device_id = test.device_id
+        
+        # 如果是同步模式，设置同步回调
+        if test.sync_mode:
+            test.sync_callback = self.wait_for_sync_with_completion
         
         try:
             logger.info(f"开始执行测试 {test_id} ({test.test_type})")
