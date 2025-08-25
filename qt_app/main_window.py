@@ -106,14 +106,27 @@ class MainWindow(QMainWindow):
     
     def closeEvent(self, event):
         """Handle window close event"""
-        # Save geometry
-        self.save_geometry()
+        # Show confirmation dialog
+        reply = QMessageBox.warning(
+            self,
+            "确认关闭",
+            "确定要关闭MiniTest-OECT上位机吗？\n所有正在运行的测试将被停止。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
         
-        # Shutdown backend
-        self.backend.shutdown()
-        
-        # Accept the event
-        event.accept()
+        if reply == QMessageBox.Yes:
+            # Save geometry
+            self.save_geometry()
+            
+            # Shutdown backend
+            self.backend.shutdown()
+            
+            # Accept the event
+            event.accept()
+        else:
+            # Ignore the event (cancel closing)
+            event.ignore()
 
 def exception_hook(exctype, value, traceback):
     """Custom exception hook to show error dialogs"""
