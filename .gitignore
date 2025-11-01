@@ -6,3 +6,6 @@ dist/run_qt_for_macapp
 dist/run_qt_for_macapp.app
 .DS_Store
 .venv
+
+# Claude Code local settings
+.claude/settings.local.json
