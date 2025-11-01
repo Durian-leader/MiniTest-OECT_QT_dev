@@ -35,7 +35,7 @@
 
 #### 方法一：使用预编译版本（推荐）
 
-1. 从 [Releases](https://github.com/yourusername/MiniTest-OECT_QT_dev/releases) 下载最新的 `.exe` 文件
+1. 从 [Releases](https://github.com/Durian-leader/MiniTest-OECT_QT_dev/releases) 下载最新的 `.exe` 文件
 2. 双击运行即可，无需安装Python
 
 #### 方法二：从源码安装
@@ -53,7 +53,7 @@
 
 3. **克隆仓库**
    ```powershell
-   git clone https://github.com/yourusername/MiniTest-OECT_QT_dev.git
+   git clone https://github.com/Durian-leader/MiniTest-OECT_QT_dev.git
    cd MiniTest-OECT_QT_dev
    ```
    
@@ -83,7 +83,7 @@
 
 #### 方法一：使用预编译版本
 
-1. 从 [Releases](https://github.com/yourusername/MiniTest-OECT_QT_dev/releases) 下载 `.dmg` 文件
+1. 从 [Releases](https://github.com/Durian-leader/MiniTest-OECT_QT_dev/releases) 下载 `.dmg` 文件
 2. 打开DMG文件，将应用拖到Applications文件夹
 3. 首次运行时，右键点击应用选择"打开"以绕过Gatekeeper
 
@@ -101,7 +101,7 @@
 
 3. **克隆仓库**
    ```bash
-   git clone https://github.com/yourusername/MiniTest-OECT_QT_dev.git
+   git clone https://github.com/Durian-leader/MiniTest-OECT_QT_dev.git
    cd MiniTest-OECT_QT_dev
    ```
 
@@ -144,7 +144,7 @@
 
 3. **克隆仓库**
    ```bash
-   git clone https://github.com/yourusername/MiniTest-OECT_QT_dev.git
+   git clone https://github.com/Durian-leader/MiniTest-OECT_QT_dev.git
    cd MiniTest-OECT_QT_dev
    ```
 
@@ -417,8 +417,10 @@ rm -rf venv
 ## 获取帮助
 
 - 查看日志：`logs/` 目录
-- GitHub Issues: [问题反馈](https://github.com/yourusername/MiniTest-OECT_QT_dev/issues)
+- GitHub Issues: [问题反馈](https://github.com/Durian-leader/MiniTest-OECT_QT_dev/issues)
 - 文档：[CLAUDE.md](CLAUDE.md) 和 [README.md](README.md)
+- 作者：lidonghao
+- 邮箱：lidonghao100@outlook.com
 
 ## 许可证
 

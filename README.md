@@ -71,7 +71,7 @@ MiniTest-OECT 是一款专业的有机电化学晶体管（OECT）电学特性�
 
 1. **克隆仓库**
 ```bash
-git clone https://github.com/yourusername/MiniTest-OECT_QT_dev.git
+git clone https://github.com/Durian-leader/MiniTest-OECT_QT_dev.git
 cd MiniTest-OECT_QT_dev
 ```
 
@@ -183,7 +183,7 @@ MiniTest-OECT_QT_dev/
 如遇到问题，请通过以下方式反馈：
 
 1. 查看 `logs/` 目录下的日志文件
-2. 在 [GitHub Issues](https://github.com/yourusername/MiniTest-OECT_QT_dev/issues) 提交问题
+2. 在 [GitHub Issues](https://github.com/Durian-leader/MiniTest-OECT_QT_dev/issues) 提交问题
 3. 提供以下信息：
    - 操作系统版本
    - Python版本
@@ -206,9 +206,10 @@ MiniTest-OECT_QT_dev/
 
 ## 📮 联系方式
 
-- 项目主页: [GitHub](https://github.com/yourusername/MiniTest-OECT_QT_dev)
-- 问题反馈: [Issues](https://github.com/yourusername/MiniTest-OECT_QT_dev/issues)
-- 邮箱: your.email@example.com
+- 项目主页: [GitHub](https://github.com/Durian-leader/MiniTest-OECT_QT_dev)
+- 问题反馈: [Issues](https://github.com/Durian-leader/MiniTest-OECT_QT_dev/issues)
+- 作者: lidonghao
+- 邮箱: lidonghao100@outlook.com
 
 ## 🙏 致谢
 
