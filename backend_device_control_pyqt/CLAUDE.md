@@ -224,7 +224,7 @@ Device → Test Process → Data Transmission → Qt (display)
 ## Important Constants and Settings
 
 ### Serial Communication
-- Default baudrate: `512000`
+- Default baudrate: `115200`
 - Stop command: `FF030100FE`
 - Identity query: `FF040100FE`
 

@@ -96,7 +96,7 @@ class SerialPortManager:
 class AsyncSerialDevice:
     """异步串口设备类，负责单个设备的通信（跨平台兼容）"""
     
-    def __init__(self, device_id: str, port: str = None, baudrate: int = 512000, 
+    def __init__(self, device_id: str, port: str = None, baudrate: int = 115200, 
                  auto_discover: bool = True):
         """
         初始化异步串口设备

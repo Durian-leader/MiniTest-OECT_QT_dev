@@ -1503,7 +1503,7 @@ async def list_available_serial_ports():
         logger.error(f"获取串口列表失败: {str(e)}")
         return []
 
-async def query_device_identity_once_raw(port: str, baudrate: int = 512000, timeout: float = 3.0) -> str:
+async def query_device_identity_once_raw(port: str, baudrate: int = 115200, timeout: float = 3.0) -> str:
     """
     使用原始串口方式查询设备身份（发送0x04指令，接收DONE!!!结尾）
     

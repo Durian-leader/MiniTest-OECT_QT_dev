@@ -31,7 +31,7 @@
 ### 🎯 技术指标
 
 - 数据采集率: 1000+ 点/秒
-- 串口通信: 512000 波特率
+- 串口通信: 115200 波特率
 - 数据延迟: < 10ms
 - 并发设备: 支持多设备同时测试
 
@@ -328,7 +328,7 @@ params = {
     "test_id": "test_001",
     "device_id": "OECT_001",
     "port": "COM3",
-    "baudrate": 512000,
+    "baudrate": 115200,
     "name": "示例测试",
     "description": "测试描述",
     "steps": [
@@ -472,7 +472,7 @@ NUM_WORKERS = 4  # 工作线程数
 **解决**:
 1. 检查串口是否被其他程序占用
 2. 验证串口权限（Linux需要dialout组）
-3. 确认波特率设置（默认512000）
+3. 确认波特率设置（默认115200）
 
 #### ❌ 数据丢失
 **原因**: 队列溢出或文件写入失败
@@ -574,7 +574,7 @@ cProfile.run('backend.start()')
 #### 单元测试
 ```python
 async def test_device_connection():
-    device = AsyncSerialDevice("COM3", 512000)
+    device = AsyncSerialDevice("COM3", 115200)
     await device.connect()
     assert device.is_connected
 ```
