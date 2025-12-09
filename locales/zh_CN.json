@@ -1,0 +1,334 @@
+{
+  "main": {
+    "window_title": "MiniTest-OECT 控制台",
+    "app_header": "MiniTest-OECT 控制台",
+    "status_ready": "就绪",
+    "tab_device_control": "设备控制",
+    "tab_test_history": "历史测试查看",
+    "menu": {
+      "about": "关于",
+      "help": "帮助"
+    },
+    "help": {
+      "doc_en": "用户使用手册",
+      "doc_zh": "用户使用手册（中文）"
+    },
+    "about": {
+      "title": "关于 MiniTest-OECT 控制台",
+      "message": "MiniTest-OECT 控制台\n开发者: 李东昊 (Donghao Li)\nEmail: lidonghao100@outlook.com\nTel: +86 135 0360 3123"
+    },
+    "dialog": {
+      "confirm_close": {
+        "title": "确认关闭",
+        "message": "确定要关闭MiniTest-OECT上位机吗？\n所有正在运行的测试将被停止。"
+      },
+      "error": "错误",
+      "warning": "Warning",
+      "success": "Success"
+    },
+    "log": {
+      "app_started": "应用程序启动",
+      "backend_started": "后端系统已启动",
+      "backend_failed": "后端系统启动失败:",
+      "backend_closed": "后端系统已关闭",
+      "app_exit": "应用程序退出"
+    }
+  },
+  "common": {
+    "yes": "是",
+    "no": "否"
+  },
+  "device_control": {
+    "device_panel": "设备看板",
+    "workflow_config": "工作流配置",
+    "realtime_monitor": "实时监测",
+    "refresh_button": "刷新设备",
+    "start_test": "开始测试",
+    "stop_test": "停止测试",
+    "export_workflow": "导出工作流",
+    "import_workflow": "导入工作流",
+    "auto_naming": "自动生成测试名称",
+    "sync_workflow": "所有设备同步执行工作流",
+    "sync_workflow_tooltip": "勾选后，所有设备将使用相同的工作流，并且每个步骤同步执行",
+    "test_name": "测试名称",
+    "test_description": "测试描述",
+    "chip_id": "芯片ID",
+    "device_number": "器件编号",
+    "test_name_placeholder": "输入测试名称",
+    "test_description_placeholder": "输入测试描述（可选）",
+    "chip_id_placeholder": "输入芯片ID（可选）",
+    "device_number_placeholder": "输入器件编号（可选）",
+    "unknown_device": "未知设备",
+    "device_description_prefix": "描述:",
+    "device_testing_prefix": "正在测试:",
+    "device_port_prefix": "端口:",
+    "current_device_prefix": "当前设备:",
+    "device_id_prefix": "设备 ID:",
+    "test_id_prefix": "测试 ID:",
+    "test_name_prefix": "测试名称:",
+    "select_device_prompt": "请选择一个设备",
+    "no_data_received": "No data received",
+    "select_device_and_start": "请选择设备并开始测试",
+    "auto_generated_name_suffix": "（点击开始测试生成）",
+    "auto_test_name_format": "测试-{port}",
+    "data_rate_format": "Data rate: {rate:.1f} msgs/sec | Processed batch: {processed}",
+    "dialog": {
+      "get_devices_failed": "获取设备列表失败:",
+      "no_device_selected": "请先选择一个设备",
+      "stop_test_failed": "\u505c\u6b62\u6d4b\u8bd5\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
+      "no_workflow_steps": "请先配置工作流步骤",
+      "cannot_get_device_info": "无法获取设备信息",
+      "device_testing": {
+        "title": "设备正在测试中",
+        "message": "设备 {device_name} 正在进行测试 (ID: {test_id})\n\n您可以选择:\n• 点击'是'停止当前测试并开启新的测试\n• 点击'否'保持当前测试"
+      },
+      "test_start_failed": "测试启动失败: {reason}",
+      "test_completed": {
+        "title": "测试完成",
+        "message": "设备 {device_name} 的测试已自动完成"
+      },
+      "test_error": {
+        "title": "测试错误",
+        "message": "设备 {device_name} 发生错误: {reason}"
+      },
+      "stopped_devices": "已停止 {count} 个设备的测试",
+      "stopped_sync_devices": "已停止 {count} 个设备的同步测试",
+      "workflow_exported": "\u5de5\u4f5c\u6d41\u5df2\u4fdd\u5b58\u5230 {path}",
+      "export_workflow_error": "导出工作流时发生错误:",
+      "workflow_imported": "工作流已导入并添加到当前工作流后面",
+      "import_workflow_error": "导入工作流时发生错误:",
+      "sync_test_started": "同步测试已启动",
+      "no_devices_started": "无法启动任何设备的测试",
+      "stop_test_failed_reason": "\u505c\u6b62\u6d4b\u8bd5\u5931\u8d25: {reason}",
+      "stop_test_error": "\u505c\u6b62\u6d4b\u8bd5\u65f6\u53d1\u751f\u9519\u8bef: {error}",
+      "sync_test_started_detail": "\u5df2\u4e3a {count} \u4e2a\u8bbe\u5907\u542f\u52a8\u540c\u6b65\u6d4b\u8bd5",
+      "sync_failed_list": "\u5931\u8d25\u7684\u8bbe\u5907",
+      "sync_failed_item": "- {device}: {reason}",
+      "no_active_test": "\u8be5\u8bbe\u5907\u6ca1\u6709\u6b63\u5728\u8fd0\u884c\u7684\u6d4b\u8bd5",
+      "test_stopped": "\u6d4b\u8bd5\u5df2\u505c\u6b62"
+    },
+    "log": {
+      "devices_refreshed": "设备列表已刷新",
+      "sync_mode_enabled": "同步工作流模式已启用",
+      "sync_mode_disabled": "同步工作流模式已禁用"
+    }
+  },
+  "workflow": {
+    "add_step_button": "添加步骤",
+    "empty_state_message": "点击\"添加步骤\"按钮开始配置工作流",
+    "step_label": "步骤 {index}",
+    "test_type": {
+      "transfer": "转移特性",
+      "transient": "瞬态特性",
+      "output": "输出特性",
+      "loop": "循环",
+      "transfer_full": "Transfer 特性",
+      "transient_full": "Transient 特性",
+      "output_full": "Output 特性",
+      "loop_full": "循环"
+    },
+    "params": {
+      "title_suffix": "参数",
+      "is_sweep": "是否扫描",
+      "time_step": "时间步长",
+      "source_voltage": "源电压",
+      "drain_voltage": "漏电压",
+      "gate_voltage_start": "栅压起点",
+      "gate_voltage_end": "栅压终点",
+      "gate_voltage_step": "栅压步长",
+      "bottom_time": "底部时间",
+      "top_time": "顶部时间",
+      "gate_voltage_bottom": "底部栅压",
+      "gate_voltage_top": "顶部栅压",
+      "cycles": "循环次数",
+      "drain_voltage_start": "漏压起点",
+      "drain_voltage_end": "漏压终点",
+      "drain_voltage_step": "漏压步长",
+      "gate_voltage_list": "栅压列表 (mV):",
+      "gate_voltage_list_placeholder": "输入栅压值,用逗号分隔,如: 0,200,400",
+      "scan_info": "扫描信息:",
+      "iterations": "循环次数"
+    },
+    "errors": {
+      "gate_voltage_out_of_range": "栅压值 {value} 超出范围 (-2500 to 2500 mV)",
+      "gate_voltage_format_error": "栅压列表格式错误,请使用逗号分隔的数字"
+    },
+    "info": {
+      "num_curves": "{count} 条输出特性曲线",
+      "vg_range": "Vg范围: {min}V ~ {max}V",
+      "vg_single": "Vg = {value}V",
+      "enter_valid_gate_voltage": "请输入有效的栅压值"
+    },
+    "unit": {
+      "ms": " ms",
+      "mv": " mV",
+      "cycles": " 次"
+    },
+    "validation": {
+      "invalid_gate_voltage": "请输入有效的栅压值"
+    },
+    "preview": {
+      "transfer": "Vg: {start}~{end}mV, Vd: {drain}mV",
+      "transient": "Vg: {bottom}~{top}mV, {cycles}次循环",
+      "output": "Vg: {gate_list}mV, Vd: {drain_start}~{drain_end}mV",
+      "loop": "{iterations}次循环, {children}个子步骤",
+      "none": "无参数"
+    },
+    "step_node": {
+      "add_child": "添加子步骤",
+      "remove": "删除"
+    }
+  },
+  "realtime": {
+    "memory_protection": "内存保护",
+    "memory_protection_tooltip": "实时图表中只保留最新的{max_points}个数据点,防止内存溢出",
+    "step_separation": "步骤间分离",
+    "step_separation_tooltip": "不同步骤的数据将在独立图表中显示",
+    "time_window": "时间窗口",
+    "time_window_tooltip": "启用10秒滚动时间窗口",
+    "show_points": "显示数据点",
+    "clear_button": "清除图表",
+    "waiting_data": "等待数据...",
+    "y_axis_current": "电流 (A)",
+    "x_axis_gate_voltage": "栅压 (V)",
+    "x_axis_time": "时间 (s)",
+    "x_axis_drain_voltage": "漏压 (V)",
+    "waiting_data_title": "等待数据...",
+    "no_data_received": "尚未收到数据",
+    "points_label": "点数: {count}",
+    "chart_cleared": "图表已手动清除",
+    "start_test_prompt": "请开始测试以显示数据",
+    "test_completed": "测试已完成 (ID: {test_id})",
+    "collecting_data": "正在采集 (ID: {test_id})",
+    "collecting_data_progress": "正在采集: {progress}% (ID: {test_id})",
+    "step_info_with_path": "当前: {type}模式 - 步骤{index}",
+    "step_info": "当前: {type}模式",
+    "title_transient": "瞬态测试 - 电流 vs 时间",
+    "title_transfer": "转移特性 - 电流 vs 栅压",
+    "title_output": "输出特性曲线 (实时)",
+    "points_label_curves": "显示: {points} 点 ({curves} 曲线)",
+    "output_current_fallback": "输出电流",
+    "points_label_discarded": "显示: {shown}/{total} 点 (已丢弃: {discarded}点)",
+    "preparing_curve": "准备output曲线: Vg={voltage}mV",
+    "step_changed": "步骤变化: {old} → {new}",
+    "added_points": "添加 {count} 点 ({mode})",
+    "added_points_fallback": "添加 {count} output 点 (fallback)",
+    "received": "收到: {type}",
+    "error": "错误: {error}"
+  },
+  "history": {
+    "refresh_button": "刷新",
+    "test_list_group": "测试列表",
+    "step_list_group": "步骤列表",
+    "data_viz_group": "数据分析",
+    "export_selected": "导出所选",
+    "delete_selected": "删除所选",
+    "plot_tab": "图表",
+    "test_info_tab": "测试信息",
+    "step_params_tab": "步骤参数",
+    "data_stats_tab": "数据统计",
+    "details_tab": "详情",
+    "unnamed_test": "未命名",
+    "device_label": "选择设备:",
+    "sort_label": "排序:",
+    "selection_tip": "按住 Ctrl/Shift 可多选",
+    "selection_label_count": "已选择 {count} 项",
+    "all_devices": "所有设备",
+    "step_label": "步骤 {index}",
+    "params": {
+      "is_sweep": "是否回扫",
+      "time_step": "时间步长",
+      "source_voltage": "源电压 (Vs)",
+      "drain_voltage": "漏电压 (Vd)",
+      "gate_voltage_start": "栅压起点 (Vg start)",
+      "gate_voltage_end": "栅压终点 (Vg end)",
+      "gate_voltage_step": "栅压步长 (Vg step)",
+      "gate_voltage_bottom": "底部栅压 (Vg low)",
+      "gate_voltage_top": "顶部栅压 (Vg high)",
+      "bottom_time": "底部时间",
+      "top_time": "顶部时间",
+      "cycles": "循环次数",
+      "gate_voltage": "栅极电压",
+      "drain_voltage_start": "漏压起点 (Vd start)",
+      "drain_voltage_end": "漏压终点 (Vd end)",
+      "drain_voltage_step": "漏压步长 (Vd step)",
+      "theoretical_points": "理论数据点数",
+      "total_duration": "总测试时间",
+      "num_output_curves": "输出特性曲线数",
+      "points_per_curve": "每条曲线数据点数",
+      "gate_voltage_list": "栅极电压列表"
+    },
+    "params_summary": {
+      "transfer": "Vg: {vg_start}~{vg_end}V, Vd: {vd}V, Vs: {vs}V",
+      "transient": "Vg: {vg_bottom}/{vg_top}V, Vd: {vd}V, Vs: {vs}V, Cycles: {cycles}",
+      "output": "Vd: {vd_start}~{vd_end}V, Vg: {vg}, Vs: {vs}V",
+      "output_gate_range": "{count} 曲线 (Vg: {min}~{max}V)"
+    },
+    "stats": {
+      "points_per_curve": "{points} 点/曲线 × {curves} 曲线"
+    },
+    "errors": {
+      "file_not_found": "数据文件不存在: {file_path}",
+      "load_step_failed": "加载步骤数据失败: {error}"
+    },
+    "data_points_label_format": "{data_count} 点/曲线 x {curve_count} 曲线",
+    "error": {
+      "data_file_missing": "数据文件不存在: {path}",
+      "load_data_failed": "加载步骤数据失败: {error}"
+    },
+    "sort": {
+      "time": "测试时间",
+      "name": "测试名称",
+      "device": "测试设备",
+      "chip_id": "芯片ID",
+      "device_number": "器件编号",
+      "description": "测试描述",
+      "help_text": "拖拽色块可调整排序优先级，点击可切换升降序"
+    },
+    "test_info": {
+      "test_id": "测试 ID",
+      "name": "名称",
+      "description": "描述",
+      "chip_id": "芯片 ID",
+      "device_number": "器件编号",
+      "device": "设备",
+      "created_at": "创建时间"
+    },
+    "data_stats": {
+      "points": "数据点数",
+      "filename": "文件名"
+    },
+    "tree_headers": {
+      "step": "步骤",
+      "type": "类型",
+      "params": "参数"
+    },
+    "dialog": {
+      "error_refresh_devices": "刷新设备列表失败: {error}",
+      "error_refresh_tests": "刷新测试列表失败: {error}",
+      "error_test_dir_not_found": "未找到测试目录: {path}",
+      "error_load_test_info": "加载测试信息失败: {error}",
+      "export": {
+        "title": "导出",
+        "select_directory": "选择导出目录",
+        "completed": "导出完成",
+        "completed_message": "已成功导出 {count} 个测试到:\n{path}",
+        "error": "导出错误",
+        "error_message": "导出测试时发生错误:\n{error}",
+        "no_selection": "请至少选择一个测试进行导出。"
+      },
+      "delete": {
+        "title": "删除",
+        "confirm_title": "确认删除",
+        "confirm_single": "确定要删除测试 '{name}' 吗？\n\n此操作将永久删除测试数据文件，无法恢复。",
+        "confirm_multiple": "确定要删除 {count} 个测试吗？\n\n此操作将永久删除测试数据文件，无法恢复。",
+        "completed": "已成功删除 {count} 个测试",
+        "error": "删除测试时发生错误:\n{error}",
+        "no_selection": "请至少选择一个测试进行删除。"
+      }
+    },
+    "plot_title_transfer": "转移特性曲线",
+    "plot_title_transient": "瞬态响应曲线",
+    "plot_title_output": "输出特性曲线"
+  }
+}

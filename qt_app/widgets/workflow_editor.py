@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIcon
 
 from qt_app.widgets.step_node import StepNodeWidget
+from qt_app.i18n.translator import tr
 
 class WorkflowEditorWidget(QWidget):
     """
@@ -27,32 +28,32 @@ class WorkflowEditorWidget(QWidget):
         
         # Top controls
         controls_layout = QHBoxLayout()
-        
-        add_btn = QPushButton("添加步骤")
-        add_btn.setIcon(QIcon.fromTheme("list-add"))
-        add_btn.clicked.connect(self.add_step)
-        controls_layout.addWidget(add_btn)
-        
+
+        self.add_btn = QPushButton(tr("workflow.add_step_button"))
+        self.add_btn.setIcon(QIcon.fromTheme("list-add"))
+        self.add_btn.clicked.connect(self.add_step)
+        controls_layout.addWidget(self.add_btn)
+
         controls_layout.addStretch()
-        
+
         main_layout.addLayout(controls_layout)
-        
+
         # Scroll area for steps
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
-        
+
         self.steps_container = QWidget()
         self.steps_layout = QVBoxLayout(self.steps_container)
         self.steps_layout.setContentsMargins(0, 0, 0, 0)
         self.steps_layout.setSpacing(10)
         self.steps_layout.setAlignment(Qt.AlignTop)
-        
+
         scroll_area.setWidget(self.steps_container)
         main_layout.addWidget(scroll_area)
-        
+
         # Empty state
-        self.empty_label = QLabel("点击“添加步骤”按钮开始配置工作流")
+        self.empty_label = QLabel(tr("workflow.empty_state_message"))
         self.empty_label.setAlignment(Qt.AlignCenter)
         self.empty_label.setStyleSheet("color: #888; padding: 20px;")
         self.steps_layout.addWidget(self.empty_label)
@@ -193,3 +194,14 @@ class WorkflowEditorWidget(QWidget):
     def get_steps(self):
         """Get the current workflow steps"""
         return self.steps.copy()
+
+    def update_translations(self):
+        """Update all UI text when language changes"""
+        self.add_btn.setText(tr("workflow.add_step_button"))
+        self.empty_label.setText(tr("workflow.empty_state_message"))
+
+        # Update all step nodes
+        for i in range(self.steps_layout.count()):
+            widget = self.steps_layout.itemAt(i).widget()
+            if widget and hasattr(widget, 'update_translations'):
+                widget.update_translations()
