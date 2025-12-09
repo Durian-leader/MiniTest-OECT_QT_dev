@@ -1,10 +1,22 @@
 {
   "main": {
-    "window_title": "MiniTest-OECT Host PC",
-    "app_header": "OECT Test Host PC",
+    "window_title": "MiniTest-OECT Console",
+    "app_header": "MiniTest-OECT Console",
     "status_ready": "Ready",
     "tab_device_control": "Device Control",
     "tab_test_history": "Test History",
+    "menu": {
+      "about": "About",
+      "help": "Help"
+    },
+    "help": {
+      "doc_en": "User Guide",
+      "doc_zh": "User Guide (Chinese)"
+    },
+    "about": {
+      "title": "About MiniTest-OECT Console",
+      "message": "MiniTest-OECT Console\nDeveloper: Li Donghao (Donghao Li)\nEmail: lidonghao100@outlook.com\nTel: +86 135 0360 3123"
+    },
     "dialog": {
       "confirm_close": {
         "title": "Confirm Close",
@@ -302,7 +314,8 @@
         "completed": "Export Completed",
         "completed_message": "Successfully exported {count} test(s) to:\n{path}",
         "error": "Export Error",
-        "error_message": "Error occurred while exporting tests:\n{error}"
+        "error_message": "Error occurred while exporting tests:\n{error}",
+        "no_selection": "Please select at least one test to export."
       },
       "delete": {
         "title": "Delete",
@@ -310,7 +323,8 @@
         "confirm_single": "Are you sure you want to delete test '{name}'?\n\nThis will permanently delete the test data files and cannot be undone.",
         "confirm_multiple": "Are you sure you want to delete {count} test(s)?\n\nThis will permanently delete the test data files and cannot be undone.",
         "completed": "Successfully deleted {count} test(s)",
-        "error": "Error occurred while deleting tests:\n{error}"
+        "error": "Error occurred while deleting tests:\n{error}",
+        "no_selection": "Please select at least one test to delete."
       }
     },
     "plot_title_transfer": "Transfer Characteristics",

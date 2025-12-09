@@ -5,7 +5,7 @@ a = Analysis(
     ['run_qt_for_exe.py'],
     pathex=[],
     binaries=[],
-    datas=[('my_icon.ico', '.')],
+    datas=[('my_icon.ico', '.'), ('locales', 'locales')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

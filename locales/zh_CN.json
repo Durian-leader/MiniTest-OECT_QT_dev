@@ -1,10 +1,22 @@
 {
   "main": {
-    "window_title": "MiniTest-OECT 上位机",
-    "app_header": "OECT 测试上位机",
+    "window_title": "MiniTest-OECT 控制台",
+    "app_header": "MiniTest-OECT 控制台",
     "status_ready": "就绪",
     "tab_device_control": "设备控制",
     "tab_test_history": "历史测试查看",
+    "menu": {
+      "about": "关于",
+      "help": "帮助"
+    },
+    "help": {
+      "doc_en": "用户使用手册",
+      "doc_zh": "用户使用手册（中文）"
+    },
+    "about": {
+      "title": "关于 MiniTest-OECT 控制台",
+      "message": "MiniTest-OECT 控制台\n开发者: 李东昊 (Donghao Li)\nEmail: lidonghao100@outlook.com\nTel: +86 135 0360 3123"
+    },
     "dialog": {
       "confirm_close": {
         "title": "确认关闭",
@@ -63,7 +75,7 @@
     "dialog": {
       "get_devices_failed": "获取设备列表失败:",
       "no_device_selected": "请先选择一个设备",
-      "stop_test_failed": "????????????",
+      "stop_test_failed": "\u505c\u6b62\u6d4b\u8bd5\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5",
       "no_workflow_steps": "请先配置工作流步骤",
       "cannot_get_device_info": "无法获取设备信息",
       "device_testing": {
@@ -81,19 +93,19 @@
       },
       "stopped_devices": "已停止 {count} 个设备的测试",
       "stopped_sync_devices": "已停止 {count} 个设备的同步测试",
-      "workflow_exported": "??????? {path}",
+      "workflow_exported": "\u5de5\u4f5c\u6d41\u5df2\u4fdd\u5b58\u5230 {path}",
       "export_workflow_error": "导出工作流时发生错误:",
       "workflow_imported": "工作流已导入并添加到当前工作流后面",
       "import_workflow_error": "导入工作流时发生错误:",
       "sync_test_started": "同步测试已启动",
       "no_devices_started": "无法启动任何设备的测试",
-      "stop_test_failed_reason": "??????: {reason}",
-      "stop_test_error": "?????????: {error}",
-      "sync_test_started_detail": "?? {count} ?????????",
-      "sync_failed_list": "?????",
+      "stop_test_failed_reason": "\u505c\u6b62\u6d4b\u8bd5\u5931\u8d25: {reason}",
+      "stop_test_error": "\u505c\u6b62\u6d4b\u8bd5\u65f6\u53d1\u751f\u9519\u8bef: {error}",
+      "sync_test_started_detail": "\u5df2\u4e3a {count} \u4e2a\u8bbe\u5907\u542f\u52a8\u540c\u6b65\u6d4b\u8bd5",
+      "sync_failed_list": "\u5931\u8d25\u7684\u8bbe\u5907",
       "sync_failed_item": "- {device}: {reason}",
-      "no_active_test": "????????????",
-      "test_stopped": "?????"
+      "no_active_test": "\u8be5\u8bbe\u5907\u6ca1\u6709\u6b63\u5728\u8fd0\u884c\u7684\u6d4b\u8bd5",
+      "test_stopped": "\u6d4b\u8bd5\u5df2\u505c\u6b62"
     },
     "log": {
       "devices_refreshed": "设备列表已刷新",
@@ -302,7 +314,8 @@
         "completed": "导出完成",
         "completed_message": "已成功导出 {count} 个测试到:\n{path}",
         "error": "导出错误",
-        "error_message": "导出测试时发生错误:\n{error}"
+        "error_message": "导出测试时发生错误:\n{error}",
+        "no_selection": "请至少选择一个测试进行导出。"
       },
       "delete": {
         "title": "删除",
@@ -310,7 +323,8 @@
         "confirm_single": "确定要删除测试 '{name}' 吗？\n\n此操作将永久删除测试数据文件，无法恢复。",
         "confirm_multiple": "确定要删除 {count} 个测试吗？\n\n此操作将永久删除测试数据文件，无法恢复。",
         "completed": "已成功删除 {count} 个测试",
-        "error": "删除测试时发生错误:\n{error}"
+        "error": "删除测试时发生错误:\n{error}",
+        "no_selection": "请至少选择一个测试进行删除。"
       }
     },
     "plot_title_transfer": "转移特性曲线",

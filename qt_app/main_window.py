@@ -4,8 +4,8 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget,
                            QVBoxLayout, QWidget, QSplitter, QLabel,
                            QStatusBar, QMessageBox, QAction, QActionGroup)
-from PyQt5.QtCore import Qt, QSettings
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtCore import Qt, QSettings, QUrl
+from PyQt5.QtGui import QIcon, QFont, QDesktopServices
 
 # Import our custom widgets
 from qt_app.widgets.device_control import DeviceControlWidget
@@ -136,6 +136,34 @@ class MainWindow(QMainWindow):
             language_group.addAction(action)
             language_menu.addAction(action)
 
+        # About menu
+        self.about_menu = menubar.addMenu(tr("main.menu.about"))
+        self.about_action = QAction(tr("main.menu.about"), self)
+        self.about_action.triggered.connect(self.show_about_dialog)
+        self.about_menu.addAction(self.about_action)
+
+        # Help menu with documentation links
+        self.help_menu = menubar.addMenu(tr("main.menu.help"))
+        self.doc_action_en = QAction(tr("main.help.doc_en"), self)
+        self.doc_action_en.triggered.connect(lambda: self.open_url("https://ai.feishu.cn/wiki/UrQ8w1QWlieUFSklFIuc6Whyn6c"))
+        self.help_menu.addAction(self.doc_action_en)
+
+        self.doc_action_zh = QAction(tr("main.help.doc_zh"), self)
+        self.doc_action_zh.triggered.connect(lambda: self.open_url("https://ai.feishu.cn/wiki/BpQzwwMGIizQWXkaGRZcLipFnYb"))
+        self.help_menu.addAction(self.doc_action_zh)
+
+    def show_about_dialog(self):
+        """Show developer information"""
+        QMessageBox.information(
+            self,
+            tr("main.about.title"),
+            tr("main.about.message")
+        )
+
+    def open_url(self, url: str):
+        """Open a URL in the default browser."""
+        QDesktopServices.openUrl(QUrl(url))
+
     def update_translations(self):
         """Update all UI text when language changes"""
         # Update window title and header
@@ -148,6 +176,18 @@ class MainWindow(QMainWindow):
 
         # Update status bar
         self.status_bar.showMessage(tr("main.status_ready"))
+
+        # Update about menu text
+        if hasattr(self, "about_menu"):
+            self.about_menu.setTitle(tr("main.menu.about"))
+        if hasattr(self, "about_action"):
+            self.about_action.setText(tr("main.menu.about"))
+        if hasattr(self, "help_menu"):
+            self.help_menu.setTitle(tr("main.menu.help"))
+        if hasattr(self, "doc_action_en"):
+            self.doc_action_en.setText(tr("main.help.doc_en"))
+        if hasattr(self, "doc_action_zh"):
+            self.doc_action_zh.setText(tr("main.help.doc_zh"))
 
         # Notify child widgets to update their translations
         self.device_control.update_translations()

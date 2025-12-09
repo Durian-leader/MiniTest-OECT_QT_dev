@@ -81,9 +81,8 @@ class RealtimePlotWidget(QWidget):
         
         layout.addWidget(self.status_frame)
         
-        # 控制面板
+        # 控制面板（已隐藏，但仍保留以防逻辑引用控件）
         control_frame = QFrame()
-        control_frame.setStyleSheet("background-color: #f0f2f5; padding: 5px; border-radius: 4px;")
         control_layout = QHBoxLayout(control_frame)
         
         # 1. 内存保护选项
@@ -112,6 +111,9 @@ class RealtimePlotWidget(QWidget):
         self.symbol_check.toggled.connect(self.toggle_point_symbols)
         control_layout.addWidget(self.symbol_check, 1)
         
+        # 保留在布局中但隐藏，避免控件被销毁导致逻辑访问崩溃
+        control_frame.setVisible(False)
+        control_frame.setMaximumHeight(1)
         layout.addWidget(control_frame)
         
         # Path bar for workflow path
@@ -324,11 +326,48 @@ class RealtimePlotWidget(QWidget):
         if self.current_step_type == 'output':
             self.flush_output_data_buffer()
     
-    def set_path_readable(self, path):
-        """Set the readable workflow path"""
+    def set_path_readable(self, path, step_type=None):
+        """Set the readable workflow path and localize known step type tokens"""
         if path:
-            self.path_readable = path
-            self.path_label.setText(path)
+            # Replace common step type names with current language equivalents
+            type_map = {
+                "转移特性": tr("workflow.test_type.transfer"),
+                "瞬态特性": tr("workflow.test_type.transient"),
+                "输出特性": tr("workflow.test_type.output"),
+                "循环": tr("workflow.test_type.loop"),
+                "迭代": tr("workflow.test_type.loop"),
+                "Transfer": tr("workflow.test_type.transfer"),
+                "Transient": tr("workflow.test_type.transient"),
+                "Output": tr("workflow.test_type.output"),
+                "Loop": tr("workflow.test_type.loop"),
+            }
+            localized_path = path
+            for src, tgt in type_map.items():
+                localized_path = localized_path.replace(src, tgt)
+
+            # If the first segment duplicates current step type, strip it
+            segments = [seg.strip() for seg in localized_path.split('>') if seg.strip()]
+            type_names = {
+                "transfer": tr("workflow.test_type.transfer"),
+                "transient": tr("workflow.test_type.transient"),
+                "output": tr("workflow.test_type.output"),
+                "loop": tr("workflow.test_type.loop"),
+            }
+            if step_type in type_names and segments:
+                first = segments[0]
+                # If the first segment starts with the step type name, drop it
+                if first.startswith(type_names[step_type]):
+                    segments = segments[1:]
+            # Remove consecutive duplicates
+            collapsed = []
+            for seg in segments:
+                if not collapsed or collapsed[-1] != seg:
+                    collapsed.append(seg)
+            if segments:
+                localized_path = " > ".join(collapsed)
+
+            self.path_readable = localized_path
+            self.path_label.setText(localized_path)
             self.path_frame.setVisible(True)
         else:
             self.path_frame.setVisible(False)
@@ -464,7 +503,7 @@ class RealtimePlotWidget(QWidget):
                 
                 # 显示步骤信息
                 if path_readable:
-                    self.set_path_readable(path_readable)
+                    self.set_path_readable(path_readable, step_type)
                     self.step_info_label.setText(tr("realtime.step_info_with_path", type=step_type, index=step_index))
                 else:
                     self.step_info_label.setText(tr("realtime.step_info", type=step_type))
