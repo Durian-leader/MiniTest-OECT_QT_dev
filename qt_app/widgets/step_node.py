@@ -10,6 +10,7 @@ from qt_app.widgets.step_params_form import StepParamsFormWidget
 from PyQt5.QtWidgets import QComboBox, QApplication, QListView, QFrame, QAbstractItemView
 from PyQt5.QtCore import QPoint, Qt, QEvent, QSize
 from PyQt5.QtGui import QPalette
+from qt_app.i18n.translator import tr
 
 class CustomComboBox(QComboBox):
     """
@@ -191,16 +192,16 @@ class StepNodeWidget(QWidget):
         header_layout.addWidget(self.collapse_indicator)
         
         # Step number label
-        num_label = QLabel(f"步骤 {self.index + 1}")
-        num_label.setStyleSheet("font-weight: bold;")
-        header_layout.addWidget(num_label)
+        self.num_label = QLabel(tr("workflow.step_label", index=self.index + 1))
+        self.num_label.setStyleSheet("font-weight: bold;")
+        header_layout.addWidget(self.num_label)
         
         # Type selector - 使用自定义下拉框替代QComboBox
         self.type_combo = CustomComboBox()
-        self.type_combo.addItem("Transfer 特性", "transfer")
-        self.type_combo.addItem("Transient 特性", "transient")
-        self.type_combo.addItem("Output 特性", "output")  # 新增
-        self.type_combo.addItem("循环", "loop")
+        self.type_combo.addItem(tr("workflow.test_type.transfer_full"), "transfer")
+        self.type_combo.addItem(tr("workflow.test_type.transient_full"), "transient")
+        self.type_combo.addItem(tr("workflow.test_type.output_full"), "output")  # 新增
+        self.type_combo.addItem(tr("workflow.test_type.loop_full"), "loop")
 
         # Set current type
         current_type = self.step.get("type", "transfer")
@@ -213,7 +214,7 @@ class StepNodeWidget(QWidget):
         header_layout.addWidget(self.type_combo)
         
         # Add child button (for loop type)
-        self.add_child_btn = QPushButton("添加子步骤")
+        self.add_child_btn = QPushButton(tr("workflow.step_node.add_child"))
         self.add_child_btn.setIcon(QIcon.fromTheme("list-add"))
         self.add_child_btn.clicked.connect(self.add_child_step)
         self.add_child_btn.setVisible(current_type == "loop")
@@ -228,10 +229,10 @@ class StepNodeWidget(QWidget):
         header_layout.addStretch()
         
         # Remove button
-        remove_btn = QPushButton("删除")
-        remove_btn.setIcon(QIcon.fromTheme("list-remove"))
-        remove_btn.clicked.connect(self.on_remove)
-        header_layout.addWidget(remove_btn)
+        self.remove_btn = QPushButton(tr("workflow.step_node.remove"))
+        self.remove_btn.setIcon(QIcon.fromTheme("list-remove"))
+        self.remove_btn.clicked.connect(self.on_remove)
+        header_layout.addWidget(self.remove_btn)
         
         step_layout.addWidget(self.header_frame)
         
@@ -377,13 +378,13 @@ class StepNodeWidget(QWidget):
             gate_start = params.get("gateVoltageStart", 0)
             gate_end = params.get("gateVoltageEnd", 0)
             drain_v = params.get("drainVoltage", 0)
-            return f"Vg: {gate_start}~{gate_end}mV, Vd: {drain_v}mV"
+            return tr("workflow.preview.transfer", start=gate_start, end=gate_end, drain=drain_v)
         
         elif step_type == "transient":
             gate_bottom = params.get("gateVoltageBottom", 0)
             gate_top = params.get("gateVoltageTop", 0)
             cycles = params.get("cycles", 1)
-            return f"Vg: {gate_bottom}~{gate_top}mV, {cycles}次循环"
+            return tr("workflow.preview.transient", bottom=gate_bottom, top=gate_top, cycles=cycles)
         
         elif step_type == "output":
             gate_list = params.get("gateVoltageList", [])
@@ -393,14 +394,14 @@ class StepNodeWidget(QWidget):
                 gate_str = gate_list[:20] + "..." if len(gate_list) > 20 else gate_list
             else:
                 gate_str = str(gate_list)
-            return f"Vg: {gate_str}mV, Vd: {drain_start}~{drain_end}mV"
+            return tr("workflow.preview.output", gate_list=gate_str, drain_start=drain_start, drain_end=drain_end)
         
         elif step_type == "loop":
             iterations = self.step.get("iterations", 1)
             child_count = len(self.step.get("steps", []))
-            return f"{iterations}次循环, {child_count}个子步骤"
+            return tr("workflow.preview.loop", iterations=iterations, children=child_count)
         
-        return "无参数"
+        return tr("workflow.preview.none")
     
     def on_remove(self):
         """Handle step removal"""
@@ -651,5 +652,30 @@ class StepNodeWidget(QWidget):
         # Reset drag state
         self.drag_start_position = None
         self.is_dragging = False
-        
+
         super().mouseReleaseEvent(event)
+
+    def update_translations(self):
+        """Update all UI text when language changes"""
+        self.collapse_indicator.setText("▶" if self.is_collapsed else "▼")
+        self.num_label.setText(tr("workflow.step_label", index=self.index + 1))
+
+        # Update type combo text while preserving current data selection
+        type_texts = [
+            tr("workflow.test_type.transfer_full"),
+            tr("workflow.test_type.transient_full"),
+            tr("workflow.test_type.output_full"),
+            tr("workflow.test_type.loop_full"),
+        ]
+        for idx, text in enumerate(type_texts):
+            if idx < self.type_combo.count():
+                self.type_combo.setItemText(idx, text)
+
+        self.add_child_btn.setText(tr("workflow.step_node.add_child"))
+        self.remove_btn.setText(tr("workflow.step_node.remove"))
+
+        # Update params preview and nested forms
+        self.params_preview.setText(self.generate_params_preview())
+        self.params_form.update_translations()
+        for child_widget in self.child_widgets:
+            child_widget.update_translations()

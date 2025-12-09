@@ -13,7 +13,9 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
                            QComboBox, QApplication)  # Added QComboBox for sorting options
 from PyQt5.QtCore import Qt, QSize, QRect, QMimeData, pyqtSignal
 from PyQt5.QtGui import QIcon, QColor, QFont, QPalette, QBrush, QDrag, QPainter
+from qt_app.i18n import tr
 
+from qt_app.i18n import tr
 import pyqtgraph as pg
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
@@ -210,12 +212,12 @@ class SortingContainer(QWidget):
         
         # 排序块定义
         block_definitions = [
-            ('time', '测试时间'),
-            ('name', '测试名称'),
-            ('device', '测试设备'),
-            ('chip_id', '芯片ID'),
-            ('device_number', '器件编号'),
-            ('description', '测试描述')
+            ('time', tr('history.sort.time')),
+            ('name', tr('history.sort.name')),
+            ('device', tr('history.sort.device')),
+            ('chip_id', tr('history.sort.chip_id')),
+            ('device_number', tr('history.sort.device_number')),
+            ('description', tr('history.sort.description'))
         ]
         
         # 创建排序块
@@ -232,9 +234,26 @@ class SortingContainer(QWidget):
         self.layout.addStretch()
         
         # 添加说明标签
-        help_label = QLabel("拖拽调整排序优先级，点击切换升/降序")
-        help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
-        self.layout.addWidget(help_label)
+        self.help_label = QLabel(tr("history.sort.help_text"))
+        self.help_label.setStyleSheet("color: #666; font-size: 10px; font-style: italic;")
+        self.layout.addWidget(self.help_label)
+
+    def update_translations(self):
+        """Refresh translated text for sort blocks and help label"""
+        translations = {
+            'time': tr('history.sort.time'),
+            'name': tr('history.sort.name'),
+            'device': tr('history.sort.device'),
+            'chip_id': tr('history.sort.chip_id'),
+            'device_number': tr('history.sort.device_number'),
+            'description': tr('history.sort.description')
+        }
+        for key, block in self.sort_blocks.items():
+            if key in translations:
+                block.display_name = translations[key]
+                block.update_display_text()
+                block.update_style()
+        self.help_label.setText(tr("history.sort.help_text"))
     
     def on_sort_direction_changed(self, sort_key, is_ascending):
         """处理排序方向变化"""
@@ -336,7 +355,7 @@ class CustomTestItemDelegate(QStyledItemDelegate):
         name_font.setBold(True)
         painter.setFont(name_font)
         
-        test_name = test.get("name", "Sin nombre")
+        test_name = test.get("name", tr("history.unnamed_test"))
         name_rect = QRect(rect.left() + 10, rect.top() + 5, rect.width() - 20, 20)
         painter.drawText(name_rect, Qt.AlignLeft | Qt.AlignVCenter, test_name)
         
@@ -463,9 +482,9 @@ class TestHistoryWidget(QWidget):
         device_layout = QHBoxLayout(device_frame)
         device_layout.setContentsMargins(5, 2, 5, 2)  # Márgenes muy pequeños
         
-        device_label = QLabel("设备:")
-        device_label.setFont(QFont("Arial", 10, QFont.Bold))  # Reducido tamaño de fuente
-        device_layout.addWidget(device_label)
+        self.device_label = QLabel(tr("history.device_label"))
+        self.device_label.setFont(QFont("Arial", 10, QFont.Bold))  # Reducido tamaño de fuente
+        device_layout.addWidget(self.device_label)
         
         self.device_list = QListWidget()
         self.device_list.setFlow(QListWidget.LeftToRight)
@@ -477,20 +496,20 @@ class TestHistoryWidget(QWidget):
         device_layout.addWidget(self.device_list)
         
         # Add drag-and-drop sorting controls
-        sort_label = QLabel("排序:")
-        sort_label.setFont(QFont("Arial", 10, QFont.Bold))
-        device_layout.addWidget(sort_label)
+        self.sort_label = QLabel(tr("history.sort_label"))
+        self.sort_label.setFont(QFont("Arial", 10, QFont.Bold))
+        device_layout.addWidget(self.sort_label)
         
         self.sorting_container = SortingContainer()
         self.sorting_container.order_changed.connect(self.on_sort_order_changed)
         self.sorting_container.sort_config_changed.connect(self.on_sort_config_changed)
         device_layout.addWidget(self.sorting_container)
         
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.setMaximumWidth(60)  # Ancho limitado
-        refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
-        refresh_btn.clicked.connect(self.refresh_devices)
-        device_layout.addWidget(refresh_btn)
+        self.refresh_btn = QPushButton(tr("history.refresh_button"))
+        self.refresh_btn.setMaximumWidth(60)  # Ancho limitado
+        self.refresh_btn.setIcon(QIcon.fromTheme("view-refresh"))
+        self.refresh_btn.clicked.connect(self.refresh_devices)
+        device_layout.addWidget(self.refresh_btn)
         
         main_layout.addWidget(device_frame)
         
@@ -503,8 +522,8 @@ class TestHistoryWidget(QWidget):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes para maximizar espacio
         
-        test_list_group = QGroupBox("测试列表")
-        test_list_layout = QVBoxLayout(test_list_group)
+        self.test_list_group = QGroupBox(tr("history.test_list_group"))
+        test_list_layout = QVBoxLayout(self.test_list_group)
         test_list_layout.setContentsMargins(5, 5, 5, 5)  # Márgenes pequeños
         
         # Add toolbar for batch operations
@@ -512,19 +531,19 @@ class TestHistoryWidget(QWidget):
         test_toolbar.setIconSize(QSize(16, 16))
         
         # Export selected action
-        export_action = QAction(QIcon.fromTheme("document-save"), "导出所选", self)
-        export_action.triggered.connect(self.export_selected_tests)
-        test_toolbar.addAction(export_action)
+        self.export_action = QAction(QIcon.fromTheme("document-save"), tr("history.export_selected"), self)
+        self.export_action.triggered.connect(self.export_selected_tests)
+        test_toolbar.addAction(self.export_action)
         
         # Delete selected action
-        delete_action = QAction(QIcon.fromTheme("edit-delete"), "删除所选", self)
-        delete_action.triggered.connect(self.delete_selected_tests)
-        test_toolbar.addAction(delete_action)
+        self.delete_action = QAction(QIcon.fromTheme("edit-delete"), tr("history.delete_selected"), self)
+        self.delete_action.triggered.connect(self.delete_selected_tests)
+        test_toolbar.addAction(self.delete_action)
         
         test_list_layout.addWidget(test_toolbar)
         
         # Selected count label
-        self.selection_label = QLabel("提示: 按住Ctrl多选或Shift连选")
+        self.selection_label = QLabel(tr("history.selection_tip"))
         self.selection_label.setAlignment(Qt.AlignCenter)
         self.selection_label.setStyleSheet("color: #666; font-size: 11px;")
         test_list_layout.addWidget(self.selection_label)
@@ -539,32 +558,32 @@ class TestHistoryWidget(QWidget):
         self.test_list.itemSelectionChanged.connect(self.on_selection_changed)
         test_list_layout.addWidget(self.test_list)
         
-        left_layout.addWidget(test_list_group)
+        left_layout.addWidget(self.test_list_group)
         
         # Middle panel - Step list
         middle_panel = QWidget()
         middle_layout = QVBoxLayout(middle_panel)
         middle_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes para maximizar espacio
         
-        step_list_group = QGroupBox("步骤列表")
-        step_list_layout = QVBoxLayout(step_list_group)
+        self.step_list_group = QGroupBox(tr("history.step_list_group"))
+        step_list_layout = QVBoxLayout(self.step_list_group)
         step_list_layout.setContentsMargins(5, 5, 5, 5)  # Márgenes pequeños
         
         self.step_list = QTreeWidget()
-        self.step_list.setHeaderLabels(["步骤", "类型", "参数"])
+        self.step_list.setHeaderLabels([tr("history.tree_headers.step"), tr("history.tree_headers.type"), tr("history.tree_headers.params")])
         self.step_list.header().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.step_list.currentItemChanged.connect(self.on_step_selected)
         step_list_layout.addWidget(self.step_list)
         
-        middle_layout.addWidget(step_list_group)
+        middle_layout.addWidget(self.step_list_group)
         
         # Right panel - Data visualization & details
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes para maximizar espacio
         
-        data_viz_group = QGroupBox("数据分析")
-        data_viz_layout = QVBoxLayout(data_viz_group)
+        self.data_viz_group = QGroupBox(tr("history.data_viz_group"))
+        data_viz_layout = QVBoxLayout(self.data_viz_group)
         data_viz_layout.setContentsMargins(5, 5, 5, 5)  # Márgenes pequeños
         
         # Tab widget for plot and details
@@ -606,7 +625,7 @@ class TestHistoryWidget(QWidget):
 
         plot_layout.addWidget(self.plot_widget)
         
-        self.data_tabs.addTab(plot_tab, "图表")
+        self.plot_tab_index = self.data_tabs.addTab(plot_tab, tr("history.plot_tab"))
         
         # Details tab
         details_tab = QWidget()
@@ -614,60 +633,69 @@ class TestHistoryWidget(QWidget):
         details_layout.setContentsMargins(2, 2, 2, 2)  # Márgenes muy pequeños
         
         # Test info
-        self.test_info_group = QGroupBox("测试信息")
+        self.test_info_group = QGroupBox(tr("history.test_info_tab"))
         test_info_layout = QFormLayout(self.test_info_group)
         test_info_layout.setContentsMargins(5, 5, 5, 5)  # Márgenes pequeños
         test_info_layout.setVerticalSpacing(4)  # Reduce espaciado vertical
         
         self.test_id_label = QLabel()
-        test_info_layout.addRow("测试ID:", self.test_id_label)
+        self.test_id_form_label = QLabel(tr("history.test_info.test_id"))
+        test_info_layout.addRow(self.test_id_form_label, self.test_id_label)
         
         self.test_name_label = QLabel()
-        test_info_layout.addRow("名称:", self.test_name_label)
+        self.test_name_form_label = QLabel(tr("history.test_info.name"))
+        test_info_layout.addRow(self.test_name_form_label, self.test_name_label)
         
         self.test_desc_label = QLabel()  # Added description label
         self.test_desc_label.setWordWrap(True)  # Allow wrapping for long descriptions
-        test_info_layout.addRow("描述:", self.test_desc_label)
+        self.test_desc_form_label = QLabel(tr("history.test_info.description"))
+        test_info_layout.addRow(self.test_desc_form_label, self.test_desc_label)
         
         self.chip_id_label = QLabel()
-        test_info_layout.addRow("芯片ID:", self.chip_id_label)
+        self.chip_id_form_label = QLabel(tr("history.test_info.chip_id"))
+        test_info_layout.addRow(self.chip_id_form_label, self.chip_id_label)
         
         self.device_number_label = QLabel()
-        test_info_layout.addRow("器件编号:", self.device_number_label)
+        self.device_number_form_label = QLabel(tr("history.test_info.device_number"))
+        test_info_layout.addRow(self.device_number_form_label, self.device_number_label)
         
         self.test_device_label = QLabel()
-        test_info_layout.addRow("设备:", self.test_device_label)
+        self.test_device_form_label = QLabel(tr("history.test_info.device"))
+        test_info_layout.addRow(self.test_device_form_label, self.test_device_label)
         
         self.test_created_label = QLabel()
-        test_info_layout.addRow("创建时间:", self.test_created_label)
+        self.test_created_form_label = QLabel(tr("history.test_info.created_at"))
+        test_info_layout.addRow(self.test_created_form_label, self.test_created_label)
         
         details_layout.addWidget(self.test_info_group)
         
         # Step params
-        self.step_params_group = QGroupBox("步骤参数")
+        self.step_params_group = QGroupBox(tr("history.step_params_tab"))
         self.step_params_layout = QFormLayout(self.step_params_group)
         self.step_params_layout.setContentsMargins(5, 5, 5, 5)  # Márgenes pequeños
         self.step_params_layout.setVerticalSpacing(4)  # Reduce espaciado vertical
         details_layout.addWidget(self.step_params_group)
         
         # Data stats
-        self.data_stats_group = QGroupBox("数据统计")
+        self.data_stats_group = QGroupBox(tr("history.data_stats_tab"))
         self.data_stats_layout = QFormLayout(self.data_stats_group)
         self.data_stats_layout.setContentsMargins(5, 5, 5, 5)  # Márgenes pequeños
         self.data_stats_layout.setVerticalSpacing(4)  # Reduce espaciado vertical
         
         self.data_points_label = QLabel()
-        self.data_stats_layout.addRow("数据点数:", self.data_points_label)
+        self.data_points_form_label = QLabel(tr("history.data_stats.points"))
+        self.data_stats_layout.addRow(self.data_points_form_label, self.data_points_label)
         
         self.data_file_label = QLabel()
-        self.data_stats_layout.addRow("文件名:", self.data_file_label)
+        self.data_file_form_label = QLabel(tr("history.data_stats.filename"))
+        self.data_stats_layout.addRow(self.data_file_form_label, self.data_file_label)
         
         details_layout.addWidget(self.data_stats_group)
         
-        self.data_tabs.addTab(details_tab, "详情")
+        self.details_tab_index = self.data_tabs.addTab(details_tab, tr("history.details_tab"))
         
         data_viz_layout.addWidget(self.data_tabs)
-        right_layout.addWidget(data_viz_group)
+        right_layout.addWidget(self.data_viz_group)
         
         # Add panels to splitter
         self.content_splitter.addWidget(left_panel)
@@ -684,10 +712,10 @@ class TestHistoryWidget(QWidget):
         
         # Update selection label
         if count > 1:
-            self.selection_label.setText(f"已选择: {count} 项")
+            self.selection_label.setText(tr("history.selection_label_count", count=count))
             self.selection_label.setStyleSheet("color: #1890ff; font-weight: bold; font-size: 11px;")
         else:
-            self.selection_label.setText("提示: 按住Ctrl多选或Shift连选")
+            self.selection_label.setText(tr("history.selection_tip"))
             self.selection_label.setStyleSheet("color: #666; font-size: 11px;")
     
     def refresh_devices(self):
@@ -711,7 +739,7 @@ class TestHistoryWidget(QWidget):
             self.device_list.clear()
             
             # Add "ALL" option at first position
-            all_item = QListWidgetItem("ALL")
+            all_item = QListWidgetItem(tr("history.all_devices"))
             all_item.setData(Qt.UserRole, "ALL")
             all_item.setBackground(QBrush(QColor(240, 248, 255)))  # Light blue background
             self.device_list.addItem(all_item)
@@ -740,7 +768,7 @@ class TestHistoryWidget(QWidget):
                 self.clear_details()
         
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"获取设备列表失败: {str(e)}")
+            QMessageBox.warning(self, tr("main.dialog.error"), tr("history.dialog.error_refresh_devices", error=str(e)))
     
     def refresh_tests(self):
         """Refresh the test list for selected device"""
@@ -780,7 +808,7 @@ class TestHistoryWidget(QWidget):
                 # Create list item with test info
                 item = QListWidgetItem()
                 item.setData(Qt.UserRole, test)
-                item.setText(test.get("name", "未命名"))
+                item.setText(test.get("name", tr("history.unnamed_test")))
                 self.test_list.addItem(item)
             
             # Restore selection if possible
@@ -802,7 +830,7 @@ class TestHistoryWidget(QWidget):
             self.on_selection_changed()
         
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"获取测试列表失败: {str(e)}")
+            QMessageBox.warning(self, tr("main.dialog.error"), tr("history.dialog.error_refresh_tests", error=str(e)))
     
     def get_selected_tests(self):
         """Get all currently selected tests"""
@@ -821,11 +849,11 @@ class TestHistoryWidget(QWidget):
         selected_tests = self.get_selected_tests()
         
         if not selected_tests:
-            QMessageBox.information(self, "导出", "请先选择要导出的测试")
+            QMessageBox.information(self, tr("history.dialog.export.title"), tr("history.dialog.export.no_selection"))
             return
         
         # Ask for destination directory
-        dest_dir = QFileDialog.getExistingDirectory(self, "选择导出目录", "", QFileDialog.ShowDirsOnly)
+        dest_dir = QFileDialog.getExistingDirectory(self, tr("history.dialog.export.select_directory"), "", QFileDialog.ShowDirsOnly)
         if not dest_dir:
             return  # User canceled
             
@@ -873,31 +901,32 @@ class TestHistoryWidget(QWidget):
                 exported_count += 1
             
             # Show results
-            result_message = f"成功导出 {exported_count} 个测试"
+            result_message = tr("history.dialog.export.completed_count", count=exported_count)
             if skipped_count > 0:
-                result_message += f"，跳过 {skipped_count} 个测试（源目录不存在）"
+                result_message += tr("history.dialog.export.skipped_count", count=skipped_count)
                 
-            QMessageBox.information(self, "导出完成", result_message)
+            QMessageBox.information(self, tr("history.dialog.export.completed_title"), result_message)
             
         except Exception as e:
-            QMessageBox.warning(self, "导出错误", f"导出过程中发生错误: {str(e)}")
+            QMessageBox.warning(self, tr("history.dialog.export.error_title"), tr("history.dialog.export.error_message", error=str(e)))
     
     def delete_selected_tests(self):
         """Delete selected tests"""
         selected_tests = self.get_selected_tests()
         
         if not selected_tests:
-            QMessageBox.information(self, "删除", "请先选择要删除的测试")
+            QMessageBox.information(self, tr("history.dialog.delete.title"), tr("history.dialog.delete.no_selection"))
             return
             
         # Confirm deletion
         count = len(selected_tests)
         if count == 1:
-            confirm_msg = "确定要删除选中的测试吗？此操作不可撤销。"
+            test_name = selected_tests[0].get("name", tr("history.unnamed_test"))
+            confirm_msg = tr("history.dialog.delete.confirm_single", name=test_name)
         else:
-            confirm_msg = f"确定要删除选中的 {count} 个测试吗？此操作不可撤销。"
+            confirm_msg = tr("history.dialog.delete.confirm_multiple", count=count)
             
-        reply = QMessageBox.question(self, "确认删除", confirm_msg, 
+        reply = QMessageBox.question(self, tr("history.dialog.delete.confirm_title"), confirm_msg, 
                                      QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
                                      
         if reply != QMessageBox.Yes:
@@ -926,14 +955,14 @@ class TestHistoryWidget(QWidget):
             self.refresh_tests()
             
             # Show results
-            result_message = f"成功删除 {deleted_count} 个测试"
+            result_message = tr("history.dialog.delete.completed_count", count=deleted_count)
             if failed_count > 0:
-                result_message += f"，失败 {failed_count} 个测试"
+                result_message += tr("history.dialog.delete.failed_count", count=failed_count)
                 
-            QMessageBox.information(self, "删除完成", result_message)
+            QMessageBox.information(self, tr("history.dialog.delete.completed_title"), result_message)
             
         except Exception as e:
-            QMessageBox.warning(self, "删除错误", f"删除过程中发生错误: {str(e)}")
+            QMessageBox.warning(self, tr("history.dialog.delete.error_title"), tr("history.dialog.delete.error_message", error=str(e)))
     
     def load_test_info(self):
         """Load test information for selected test"""
@@ -944,7 +973,7 @@ class TestHistoryWidget(QWidget):
             # Get test directory
             test_dir = self.selected_test.get("dir_path")
             if not test_dir or not os.path.exists(test_dir):
-                QMessageBox.warning(self, "Error", f"测试目录不存在: {test_dir}")
+                QMessageBox.warning(self, tr("main.dialog.error"), tr("history.dialog.error_test_dir_not_found", path=test_dir))
                 return
             
             # Load test info
@@ -982,7 +1011,7 @@ class TestHistoryWidget(QWidget):
             self.clear_plot()
         
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"加载测试信息失败: {str(e)}")
+            QMessageBox.warning(self, tr("main.dialog.error"), tr("history.dialog.error_load_test_info", error=str(e)))
     
     def refresh_step_list(self):
         """Refresh the step list for selected test"""
@@ -999,7 +1028,7 @@ class TestHistoryWidget(QWidget):
             item = QTreeWidgetItem()
             
             # Set step number
-            item.setText(0, f"步骤 {i+1}")
+            item.setText(0, tr("history.step_label", index=i+1))
             
             # Set step type
             step_type = step.get("type", "unknown")
@@ -1017,27 +1046,27 @@ class TestHistoryWidget(QWidget):
                 gate_end = params.get("gateVoltageEnd", 0) / 1000.0
                 drain = params.get("drainVoltage", 0) / 1000.0
                 source = params.get("sourceVoltage", 0) / 1000.0
-                params_text = f"Vg: {gate_start} → {gate_end}V, Vd: {drain}V, Vs: {source}V"
-            
+                params_text = tr("history.params_summary.transfer", vg_start=f"{gate_start}", vg_end=f"{gate_end}", vd=f"{drain}", vs=f"{source}")
+
             elif step_type == "transient":
                 gate_bottom = params.get("gateVoltageBottom", 0) / 1000.0
                 gate_top = params.get("gateVoltageTop", 0) / 1000.0
                 drain = params.get("drainVoltage", 0) / 1000.0
                 source = params.get("sourceVoltage", 0) / 1000.0
                 cycles = params.get("cycles", 0)
-                params_text = f"Vg: {gate_bottom} → {gate_top}V, Vd: {drain}V, Vs: {source}V, 循环: {cycles}"
-                
+                params_text = tr("history.params_summary.transient", vg_bottom=f"{gate_bottom}", vg_top=f"{gate_top}", vd=f"{drain}", vs=f"{source}", cycles=cycles)
+
             elif step_type == "output":  # 修改：正确显示output参数
                 gate_voltages = params.get("gateVoltageList", [0])
                 if isinstance(gate_voltages, list):
-                    gate_text = f"{min(gate_voltages)/1000.0:.3f}-{max(gate_voltages)/1000.0:.3f}V ({len(gate_voltages)}条)"
+                    gate_text = tr("history.params_summary.output_gate_range", min=f"{min(gate_voltages)/1000.0:.3f}", max=f"{max(gate_voltages)/1000.0:.3f}", count=len(gate_voltages))
                 else:
                     gate_text = f"{gate_voltages/1000.0:.3f}V"
                 
                 drain_start = params.get("drainVoltageStart", 0) / 1000.0
                 drain_end = params.get("drainVoltageEnd", 0) / 1000.0
                 source = params.get("sourceVoltage", 0) / 1000.0
-                params_text = f"Vd: {drain_start:.3f} → {drain_end:.3f}V, Vg: {gate_text}, Vs: {source:.3f}V"
+                params_text = tr("history.params_summary.output", vd_start=f"{drain_start:.3f}", vd_end=f"{drain_end:.3f}", vg=gate_text, vs=f"{source:.3f}")
 
             item.setText(2, params_text)
             
@@ -1082,6 +1111,8 @@ class TestHistoryWidget(QWidget):
         """Update step parameters in the details tab"""
         # Clear existing form
         self.clear_step_params()
+        # Cache current step for re-rendering on language change
+        self.current_step_display = step
         
         # Get step type and params
         step_type = step.get("type", "unknown")
@@ -1089,68 +1120,70 @@ class TestHistoryWidget(QWidget):
         
         # Add params to form
         if step_type == "transfer":
-            self.add_param_label("是否回扫", "是" if params.get("isSweep") == 1 else "否")
-            self.add_param_label("时间步长", f"{params.get('timeStep', 0)} ms")
+            is_sweep_text = tr("common.yes") if params.get("isSweep") == 1 else tr("common.no")
+            self.add_param_label(tr("history.params.is_sweep"), is_sweep_text)
+            self.add_param_label(tr("history.params.time_step"), f"{params.get('timeStep', 0)} ms")
             
             # Add voltages with consistent formatting and highlighting
-            self.add_voltage_param("源电压 (Vs)", params.get('sourceVoltage', 0))
-            self.add_voltage_param("漏电压 (Vd)", params.get('drainVoltage', 0))
-            self.add_voltage_param("栅压起点 (Vg start)", params.get('gateVoltageStart', 0))
-            self.add_voltage_param("栅压终点 (Vg end)", params.get('gateVoltageEnd', 0))
-            self.add_voltage_param("栅压步长 (Vg step)", params.get('gateVoltageStep', 0))
+            self.add_voltage_param(tr("history.params.source_voltage"), params.get('sourceVoltage', 0))
+            self.add_voltage_param(tr("history.params.drain_voltage"), params.get('drainVoltage', 0))
+            self.add_voltage_param(tr("history.params.gate_voltage_start"), params.get('gateVoltageStart', 0))
+            self.add_voltage_param(tr("history.params.gate_voltage_end"), params.get('gateVoltageEnd', 0))
+            self.add_voltage_param(tr("history.params.gate_voltage_step"), params.get('gateVoltageStep', 0))
             
             # Add calculated values for convenience
             gate_span = abs(params.get('gateVoltageEnd', 0) - params.get('gateVoltageStart', 0))
             step_size = params.get('gateVoltageStep', 0)
             if step_size > 0:
                 num_points = gate_span / step_size + 1
-                self.add_param_label("理论数据点数", f"{int(num_points)}")
+                self.add_param_label(tr("history.params.theoretical_points"), f"{int(num_points)}")
         
         elif step_type == "transient":
-            self.add_param_label("时间步长", f"{params.get('timeStep', 0)} ms")
+            self.add_param_label(tr("history.params.time_step"), f"{params.get('timeStep', 0)} ms")
             
             # Add voltages with consistent formatting and highlighting
-            self.add_voltage_param("源电压 (Vs)", params.get('sourceVoltage', 0))
-            self.add_voltage_param("漏电压 (Vd)", params.get('drainVoltage', 0))
-            self.add_voltage_param("底部栅压 (Vg low)", params.get('gateVoltageBottom', 0))
-            self.add_voltage_param("顶部栅压 (Vg high)", params.get('gateVoltageTop', 0))
+            self.add_voltage_param(tr("history.params.source_voltage"), params.get('sourceVoltage', 0))
+            self.add_voltage_param(tr("history.params.drain_voltage"), params.get('drainVoltage', 0))
+            self.add_voltage_param(tr("history.params.gate_voltage_bottom"), params.get('gateVoltageBottom', 0))
+            self.add_voltage_param(tr("history.params.gate_voltage_top"), params.get('gateVoltageTop', 0))
             
             # Add timing parameters
-            self.add_param_label("底部时间", f"{params.get('bottomTime', 0)} ms")
-            self.add_param_label("顶部时间", f"{params.get('topTime', 0)} ms")
-            self.add_param_label("循环次数", f"{params.get('cycles', 0)}")
+            self.add_param_label(tr("history.params.bottom_time"), f"{params.get('bottomTime', 0)} ms")
+            self.add_param_label(tr("history.params.top_time"), f"{params.get('topTime', 0)} ms")
+            self.add_param_label(tr("history.params.cycles"), f"{params.get('cycles', 0)}")
             
             # Add calculated values for convenience
             cycle_time = params.get('bottomTime', 0) + params.get('topTime', 0)
             total_time = cycle_time * params.get('cycles', 0)
-            self.add_param_label("总测试时间", f"{total_time} ms ({total_time/1000:.1f} s)")
+            self.add_param_label(tr("history.params.total_duration"), f"{total_time} ms ({total_time/1000:.1f} s)")
             
         elif step_type == "output":  # 修改：正确显示output参数
-            self.add_param_label("是否回扫", "是" if params.get("isSweep") == 1 else "否")
-            self.add_param_label("时间步长", f"{params.get('timeStep', 0)} ms")
+            is_sweep_text = tr("common.yes") if params.get("isSweep") == 1 else tr("common.no")
+            self.add_param_label(tr("history.params.is_sweep"), is_sweep_text)
+            self.add_param_label(tr("history.params.time_step"), f"{params.get('timeStep', 0)} ms")
             
             # Add voltages with consistent formatting and highlighting
-            self.add_voltage_param("源电压 (Vs)", params.get('sourceVoltage', 0))
+            self.add_voltage_param(tr("history.params.source_voltage"), params.get('sourceVoltage', 0))
             
             # 显示栅极电压列表
             gate_voltages = params.get("gateVoltageList", [0])
             if isinstance(gate_voltages, list):
                 gate_voltage_text = ", ".join([f"{v} mV" for v in gate_voltages])
-                self.add_param_label("栅极电压列表", gate_voltage_text)
-                self.add_param_label("输出特性曲线数", f"{len(gate_voltages)} 条")
+                self.add_param_label(tr("history.params.gate_voltage_list"), gate_voltage_text)
+                self.add_param_label(tr("history.params.num_output_curves"), str(len(gate_voltages)))
             else:
-                self.add_voltage_param("栅极电压", gate_voltages)
+                self.add_voltage_param(tr("history.params.gate_voltage"), gate_voltages)
             
-            self.add_voltage_param("漏压起点 (Vd start)", params.get('drainVoltageStart', 0))
-            self.add_voltage_param("漏压终点 (Vd end)", params.get('drainVoltageEnd', 0))
-            self.add_voltage_param("漏压步长 (Vd step)", params.get('drainVoltageStep', 0))
+            self.add_voltage_param(tr("history.params.drain_voltage_start"), params.get('drainVoltageStart', 0))
+            self.add_voltage_param(tr("history.params.drain_voltage_end"), params.get('drainVoltageEnd', 0))
+            self.add_voltage_param(tr("history.params.drain_voltage_step"), params.get('drainVoltageStep', 0))
             
             # Add calculated values for convenience
             drain_span = abs(params.get('drainVoltageEnd', 0) - params.get('drainVoltageStart', 0))
             step_size = params.get('drainVoltageStep', 0)
             if step_size > 0:
                 num_points = drain_span / step_size + 1
-                self.add_param_label("每条曲线数据点数", f"{int(num_points)}")
+                self.add_param_label(tr("history.params.points_per_curve"), f"{int(num_points)}")
     
     def add_param_label(self, name, value):
         """Add a parameter label to the form"""
@@ -1167,8 +1200,9 @@ class TestHistoryWidget(QWidget):
     
     def update_data_stats(self, file_name, data_count, curve_count=1):
         """Update data statistics in the details tab"""
+        self._last_data_stats = (file_name, data_count, curve_count)
         if curve_count > 1:
-            self.data_points_label.setText(f"{data_count} 点/曲线 × {curve_count} 曲线")
+            self.data_points_label.setText(tr("history.data_points_label_format", data_count=data_count, curve_count=curve_count))
         else:
             self.data_points_label.setText(str(data_count))
         self.data_file_label.setText(file_name)
@@ -1226,7 +1260,7 @@ class TestHistoryWidget(QWidget):
             file_path = os.path.join(test_dir, data_file)
             
             if not os.path.exists(file_path):
-                QMessageBox.warning(self, "Error", f"数据文件不存在: {file_path}")
+                QMessageBox.warning(self, tr("main.dialog.error"), tr("history.errors.file_not_found", file_path=file_path))
                 return
             
             # Load CSV data
@@ -1258,7 +1292,7 @@ class TestHistoryWidget(QWidget):
             self.update_step_params(step)
             
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"加载步骤数据失败: {str(e)}")
+            QMessageBox.warning(self, tr("main.dialog.error"), tr("history.errors.load_step_failed", error=str(e)))
     
     def load_output_data(self, reader, header):
         """加载output类型的多曲线数据"""
@@ -1330,8 +1364,9 @@ class TestHistoryWidget(QWidget):
         
         # 设置坐标轴标签
         self.plot_widget.setLabel('bottom', f'{x_label} (V)')
-        self.plot_widget.setLabel('left', 'Current (A)')
-        self.plot_widget.setTitle('输出特性曲线')
+        self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+        self.plot_widget.setTitle(tr("history.plot_title_output"))
+        self.last_plot_type = "output"
         
         # 绘制每条曲线
         colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k', 'orange', 'purple', 'brown']
@@ -1358,13 +1393,15 @@ class TestHistoryWidget(QWidget):
         
         # Set plot labels based on step type
         if step_type == "transfer":
-            self.plot_widget.setLabel('bottom', 'Gate Voltage (V)')
-            self.plot_widget.setLabel('left', 'Current (A)')
-            self.plot_widget.setTitle('转移特性曲线')
+            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_gate_voltage"))
+            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+            self.plot_widget.setTitle(tr("history.plot_title_transfer"))
+            self.last_plot_type = "transfer"
         else:  # transient
-            self.plot_widget.setLabel('bottom', 'Time (s)')
-            self.plot_widget.setLabel('left', 'Current (A)')
-            self.plot_widget.setTitle('瞬态响应曲线')
+            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_time"))
+            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+            self.plot_widget.setTitle(tr("history.plot_title_transient"))
+            self.last_plot_type = "transient"
         
         # 创建并绘制曲线
         line = self.plot_widget.plot(x, y, 
@@ -1653,3 +1690,93 @@ class TestHistoryWidget(QWidget):
         self.sort_directions = config.get('directions', self.sort_directions)
         # 刷新测试列表应用新的排序
         self.refresh_tests()
+
+    def update_translations(self):
+        """Update all UI text when language changes"""
+        # Top controls
+        self.device_label.setText(tr("history.device_label"))
+        self.sort_label.setText(tr("history.sort_label"))
+        if hasattr(self.sorting_container, "update_translations"):
+            self.sorting_container.update_translations()
+        self.refresh_btn.setText(tr("history.refresh_button"))
+
+        # Test list group
+        self.test_list_group.setTitle(tr("history.test_list_group"))
+        self.export_action.setText(tr("history.export_selected"))
+        self.delete_action.setText(tr("history.delete_selected"))
+
+        # Update selection helper text based on current selection count
+        selected_items = self.test_list.selectedItems() if hasattr(self, "test_list") else []
+        count = len(selected_items) if selected_items else 0
+        if count > 1:
+            self.selection_label.setText(tr("history.selection_label_count", count=count))
+            self.selection_label.setStyleSheet("color: #1890ff; font-weight: bold; font-size: 11px;")
+        else:
+            self.selection_label.setText(tr("history.selection_tip"))
+            self.selection_label.setStyleSheet("color: #666; font-size: 11px;")
+
+        # Step list
+        self.step_list_group.setTitle(tr("history.step_list_group"))
+        self.step_list.setHeaderLabels([
+            tr("history.tree_headers.step"),
+            tr("history.tree_headers.type"),
+            tr("history.tree_headers.params")
+        ])
+
+        # Data visualization
+        self.data_viz_group.setTitle(tr("history.data_viz_group"))
+        self.data_tabs.setTabText(self.plot_tab_index, tr("history.plot_tab"))
+        self.data_tabs.setTabText(self.details_tab_index, tr("history.details_tab"))
+
+        # Test info group
+        self.test_info_group.setTitle(tr("history.test_info_tab"))
+        self.test_id_form_label.setText(tr("history.test_info.test_id"))
+        self.test_name_form_label.setText(tr("history.test_info.name"))
+        self.test_desc_form_label.setText(tr("history.test_info.description"))
+        self.chip_id_form_label.setText(tr("history.test_info.chip_id"))
+        self.device_number_form_label.setText(tr("history.test_info.device_number"))
+        self.test_device_form_label.setText(tr("history.test_info.device"))
+        self.test_created_form_label.setText(tr("history.test_info.created_at"))
+
+        # Step params group
+        self.step_params_group.setTitle(tr("history.step_params_tab"))
+
+        # Data stats group
+        self.data_stats_group.setTitle(tr("history.data_stats_tab"))
+        self.data_points_form_label.setText(tr("history.data_stats.points"))
+        self.data_file_form_label.setText(tr("history.data_stats.filename"))
+
+        # Re-render cached step params and data stats so labels use new language
+        if hasattr(self, "current_step_display") and self.current_step_display:
+            self.update_step_params(self.current_step_display)
+        if hasattr(self, "_last_data_stats") and self._last_data_stats:
+            file_name, data_count, curve_count = self._last_data_stats
+            self.update_data_stats(file_name, data_count, curve_count)
+
+        # Refresh device list header item ("All Devices") without losing selection
+        current_device = self.selected_device
+        self.refresh_devices()
+        # Restore previous selection if possible
+        if current_device:
+            for i in range(self.device_list.count()):
+                if self.device_list.item(i).data(Qt.UserRole) == current_device:
+                    self.device_list.setCurrentRow(i)
+                    break
+
+        # Refresh plot title/labels with latest language if a plot is shown
+        if hasattr(self, "last_plot_type"):
+            if self.last_plot_type == "output":
+                # Re-apply output titles/labels
+                if 'x_label' in self.step_data_dict:
+                    x_label = self.step_data_dict['x_label']
+                    self.plot_widget.setLabel('bottom', f'{x_label} (V)')
+                self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+                self.plot_widget.setTitle(tr("history.plot_title_output"))
+            elif self.last_plot_type == "transfer":
+                self.plot_widget.setLabel('bottom', tr("realtime.x_axis_gate_voltage"))
+                self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+                self.plot_widget.setTitle(tr("history.plot_title_transfer"))
+            elif self.last_plot_type == "transient":
+                self.plot_widget.setLabel('bottom', tr("realtime.x_axis_time"))
+                self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+                self.plot_widget.setTitle(tr("history.plot_title_transient"))

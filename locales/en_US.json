@@ -1,0 +1,320 @@
+{
+  "main": {
+    "window_title": "MiniTest-OECT Host PC",
+    "app_header": "OECT Test Host PC",
+    "status_ready": "Ready",
+    "tab_device_control": "Device Control",
+    "tab_test_history": "Test History",
+    "dialog": {
+      "confirm_close": {
+        "title": "Confirm Close",
+        "message": "Are you sure you want to close MiniTest-OECT Host PC?\nAll running tests will be stopped."
+      },
+      "error": "Error",
+      "warning": "Warning",
+      "success": "Success"
+    },
+    "log": {
+      "app_started": "Application started",
+      "backend_started": "Backend system started",
+      "backend_failed": "Backend system failed to start:",
+      "backend_closed": "Backend system closed",
+      "app_exit": "Application exit"
+    }
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No"
+  },
+  "device_control": {
+    "device_panel": "Device Panel",
+    "workflow_config": "Workflow Configuration",
+    "realtime_monitor": "Real-time Monitor",
+    "refresh_button": "Refresh Devices",
+    "start_test": "Start Test",
+    "stop_test": "Stop Test",
+    "export_workflow": "Export Workflow",
+    "import_workflow": "Import Workflow",
+    "auto_naming": "Auto-generate test name",
+    "sync_workflow": "Synchronize workflow execution across all devices",
+    "sync_workflow_tooltip": "When checked, all devices will use the same workflow and execute each step synchronously",
+    "test_name": "Test Name",
+    "test_description": "Test Description",
+    "chip_id": "Chip ID",
+    "device_number": "Device Number",
+    "test_name_placeholder": "Enter test name",
+    "test_description_placeholder": "Enter test description (optional)",
+    "chip_id_placeholder": "Enter chip ID (optional)",
+    "device_number_placeholder": "Enter device number (optional)",
+    "unknown_device": "Unknown device",
+    "device_description_prefix": "Description:",
+    "device_testing_prefix": "Testing:",
+    "device_port_prefix": "Port:",
+    "current_device_prefix": "Current device:",
+    "device_id_prefix": "Device ID:",
+    "test_id_prefix": "Test ID:",
+    "test_name_prefix": "Test Name:",
+    "select_device_prompt": "Please select a device",
+    "no_data_received": "No data received",
+    "select_device_and_start": "Please select a device and start testing",
+    "auto_generated_name_suffix": "(Click start test to generate)",
+    "auto_test_name_format": "Test-{port}",
+    "data_rate_format": "Data rate: {rate:.1f} msgs/sec | Processed batch: {processed}",
+    "dialog": {
+      "get_devices_failed": "Failed to get device list:",
+      "no_device_selected": "Please select a device first",
+      "stop_test_failed": "Failed to stop test, please try again later",
+      "no_workflow_steps": "Please configure workflow steps first",
+      "cannot_get_device_info": "Cannot get device information",
+      "device_testing": {
+        "title": "Device is Testing",
+        "message": "Device {device_name} is currently running a test (ID: {test_id})\n\nYou can choose to:\n• Click 'Yes' to stop the current test and start a new one\n• Click 'No' to keep the current test running"
+      },
+      "test_start_failed": "Test start failed: {reason}",
+      "test_completed": {
+        "title": "Test Completed",
+        "message": "Test on device {device_name} has completed automatically"
+      },
+      "test_error": {
+        "title": "Test Error",
+        "message": "Device {device_name} encountered an error: {reason}"
+      },
+      "stopped_devices": "Stopped tests on {count} device(s)",
+      "stopped_sync_devices": "Stopped synchronized tests on {count} device(s)",
+      "workflow_exported": "Workflow saved to {path}",
+      "export_workflow_error": "Error exporting workflow:",
+      "workflow_imported": "Workflow imported and appended to current workflow",
+      "import_workflow_error": "Error importing workflow:",
+      "sync_test_started": "Synchronized test started",
+      "no_devices_started": "Failed to start tests on any device",
+      "stop_test_failed_reason": "Failed to stop test: {reason}",
+      "stop_test_error": "Error stopping test: {error}",
+      "sync_test_started_detail": "Started synchronized test for {count} device(s)",
+      "sync_failed_list": "Failed devices",
+      "sync_failed_item": "- {device}: {reason}",
+      "no_active_test": "This device has no active test",
+      "test_stopped": "Test has been stopped"
+    },
+    "log": {
+      "devices_refreshed": "Device list refreshed",
+      "sync_mode_enabled": "Synchronized workflow mode enabled",
+      "sync_mode_disabled": "Synchronized workflow mode disabled"
+    }
+  },
+  "workflow": {
+    "add_step_button": "Add Step",
+    "empty_state_message": "Click \"Add Step\" button to start configuring workflow",
+    "step_label": "Step {index}",
+    "test_type": {
+      "transfer": "Transfer",
+      "transient": "Transient",
+      "output": "Output",
+      "loop": "Loop",
+      "transfer_full": "Transfer Characteristics",
+      "transient_full": "Transient Characteristics",
+      "output_full": "Output Characteristics",
+      "loop_full": "Loop"
+    },
+    "params": {
+      "title_suffix": "Parameters",
+      "is_sweep": "Sweep",
+      "time_step": "Time Step",
+      "source_voltage": "Source Voltage",
+      "drain_voltage": "Drain Voltage",
+      "gate_voltage_start": "Gate Voltage Start",
+      "gate_voltage_end": "Gate Voltage End",
+      "gate_voltage_step": "Gate Voltage Step",
+      "bottom_time": "Bottom Time",
+      "top_time": "Top Time",
+      "gate_voltage_bottom": "Bottom Gate Voltage",
+      "gate_voltage_top": "Top Gate Voltage",
+      "cycles": "Cycles",
+      "drain_voltage_start": "Drain Voltage Start",
+      "drain_voltage_end": "Drain Voltage End",
+      "drain_voltage_step": "Drain Voltage Step",
+      "gate_voltage_list": "Gate Voltage List (mV):",
+      "gate_voltage_list_placeholder": "Enter values, comma-separated, e.g.: 0,200,400",
+      "scan_info": "Scan Info:",
+      "iterations": "Iterations"
+    },
+    "errors": {
+      "gate_voltage_out_of_range": "Gate voltage {value} is out of range (-2500 to 2500 mV)",
+      "gate_voltage_format_error": "Gate voltage list format error, please use comma-separated numbers"
+    },
+    "info": {
+      "num_curves": "{count} output characteristic curves",
+      "vg_range": "Vg range: {min}V ~ {max}V",
+      "vg_single": "Vg = {value}V",
+      "enter_valid_gate_voltage": "Please enter valid gate voltage values"
+    },
+    "unit": {
+      "ms": " ms",
+      "mv": " mV",
+      "cycles": " cycles"
+    },
+    "validation": {
+      "invalid_gate_voltage": "Please enter valid gate voltage values"
+    },
+    "preview": {
+      "transfer": "Vg: {start}~{end}mV, Vd: {drain}mV",
+      "transient": "Vg: {bottom}~{top}mV, {cycles} cycles",
+      "output": "Vg: {gate_list}mV, Vd: {drain_start}~{drain_end}mV",
+      "loop": "{iterations} cycles, {children} sub-steps",
+      "none": "No parameters"
+    },
+    "step_node": {
+      "add_child": "Add sub-step",
+      "remove": "Delete"
+    }
+  },
+  "realtime": {
+    "memory_protection": "Memory Protection",
+    "memory_protection_tooltip": "Keep only the latest {max_points} data points in real-time chart to prevent memory overflow",
+    "step_separation": "Step Separation",
+    "step_separation_tooltip": "Data from different steps will be displayed in separate charts",
+    "time_window": "Time Window",
+    "time_window_tooltip": "Enable 10-second rolling time window",
+    "show_points": "Show Data Points",
+    "clear_button": "Clear Chart",
+    "waiting_data": "Waiting for data...",
+    "y_axis_current": "Current (A)",
+    "x_axis_gate_voltage": "Gate Voltage (V)",
+    "x_axis_time": "Time (s)",
+    "x_axis_drain_voltage": "Drain Voltage (V)",
+    "waiting_data_title": "Waiting for data...",
+    "no_data_received": "No data received yet",
+    "points_label": "Points: {count}",
+    "chart_cleared": "Chart has been manually cleared",
+    "start_test_prompt": "Please start a test to display data",
+    "test_completed": "Test completed (ID: {test_id})",
+    "collecting_data": "Collecting data (ID: {test_id})",
+    "collecting_data_progress": "Collecting data: {progress}% (ID: {test_id})",
+    "step_info_with_path": "Current: {type} mode - Step {index}",
+    "step_info": "Current: {type} mode",
+    "title_transient": "Transient Test - Current vs. Time",
+    "title_transfer": "Transfer Characteristics - Current vs. Gate Voltage",
+    "title_output": "Output Characteristics (Real-time)",
+    "points_label_curves": "Showing: {points} points ({curves} curves)",
+    "output_current_fallback": "Output Current",
+    "points_label_discarded": "Showing: {shown}/{total} points (Discarded: {discarded})",
+    "preparing_curve": "Preparing output curve: Vg={voltage}mV",
+    "step_changed": "Step changed: {old} → {new}",
+    "added_points": "Added {count} points ({mode})",
+    "added_points_fallback": "Added {count} output points (fallback)",
+    "received": "Received: {type}",
+    "error": "Error: {error}"
+  },
+  "history": {
+    "refresh_button": "Refresh",
+    "test_list_group": "Test List",
+    "step_list_group": "Step List",
+    "data_viz_group": "Data Visualization",
+    "export_selected": "Export Selected",
+    "delete_selected": "Delete Selected",
+    "plot_tab": "Plot",
+    "test_info_tab": "Test Info",
+    "step_params_tab": "Step Parameters",
+    "data_stats_tab": "Data Statistics",
+    "details_tab": "Details",
+    "unnamed_test": "Unnamed",
+    "device_label": "Select Device:",
+    "sort_label": "Sort:",
+    "selection_tip": "Hold Ctrl/Shift to select multiple",
+    "selection_label_count": "Selected {count} items",
+    "all_devices": "All Devices",
+    "step_label": "Step {index}",
+    "params": {
+      "is_sweep": "Back sweep",
+      "time_step": "Time Step",
+      "source_voltage": "Source Voltage (Vs)",
+      "drain_voltage": "Drain Voltage (Vd)",
+      "gate_voltage_start": "Gate Voltage Start (Vg start)",
+      "gate_voltage_end": "Gate Voltage End (Vg end)",
+      "gate_voltage_step": "Gate Voltage Step (Vg step)",
+      "gate_voltage_bottom": "Gate Voltage Low (Vg low)",
+      "gate_voltage_top": "Gate Voltage High (Vg high)",
+      "bottom_time": "Bottom Time",
+      "top_time": "Top Time",
+      "cycles": "Cycles",
+      "gate_voltage": "Gate Voltage",
+      "drain_voltage_start": "Drain Voltage Start (Vd start)",
+      "drain_voltage_end": "Drain Voltage End (Vd end)",
+      "drain_voltage_step": "Drain Voltage Step (Vd step)",
+      "theoretical_points": "Theoretical data points",
+      "total_duration": "Total duration",
+      "num_output_curves": "Number of output curves",
+      "points_per_curve": "Points per curve",
+      "gate_voltage_list": "Gate voltage list"
+    },
+    "params_summary": {
+      "transfer": "Vg: {vg_start}~{vg_end}V, Vd: {vd}V, Vs: {vs}V",
+      "transient": "Vg: {vg_bottom}/{vg_top}V, Vd: {vd}V, Vs: {vs}V, Cycles: {cycles}",
+      "output": "Vd: {vd_start}~{vd_end}V, Vg: {vg}, Vs: {vs}V",
+      "output_gate_range": "{count} curves (Vg: {min}~{max}V)"
+    },
+    "stats": {
+      "points_per_curve": "{points} points/curve × {curves} curves"
+    },
+    "errors": {
+      "file_not_found": "Data file not found: {file_path}",
+      "load_step_failed": "Failed to load step data: {error}"
+    },
+    "data_points_label_format": "{data_count} pts/curve x {curve_count} curves",
+    "error": {
+      "data_file_missing": "Data file missing: {path}",
+      "load_data_failed": "Failed to load step data: {error}"
+    },
+    "sort": {
+      "time": "Test Time",
+      "name": "Test Name",
+      "device": "Test Device",
+      "chip_id": "Chip ID",
+      "device_number": "Device Number",
+      "description": "Test Description",
+      "help_text": "Drag blocks to reorder priority, click to toggle asc/desc"
+    },
+    "test_info": {
+      "test_id": "Test ID",
+      "name": "Name",
+      "description": "Description",
+      "chip_id": "Chip ID",
+      "device_number": "Device Number",
+      "device": "Device",
+      "created_at": "Created At"
+    },
+    "data_stats": {
+      "points": "Data Points",
+      "filename": "Filename"
+    },
+    "tree_headers": {
+      "step": "Step",
+      "type": "Type",
+      "params": "Parameters"
+    },
+    "dialog": {
+      "error_refresh_devices": "Failed to refresh device list: {error}",
+      "error_refresh_tests": "Failed to refresh test list: {error}",
+      "error_test_dir_not_found": "Test directory not found: {path}",
+      "error_load_test_info": "Failed to load test info: {error}",
+      "export": {
+        "title": "Export",
+        "select_directory": "Select Export Directory",
+        "completed": "Export Completed",
+        "completed_message": "Successfully exported {count} test(s) to:\n{path}",
+        "error": "Export Error",
+        "error_message": "Error occurred while exporting tests:\n{error}"
+      },
+      "delete": {
+        "title": "Delete",
+        "confirm_title": "Confirm Deletion",
+        "confirm_single": "Are you sure you want to delete test '{name}'?\n\nThis will permanently delete the test data files and cannot be undone.",
+        "confirm_multiple": "Are you sure you want to delete {count} test(s)?\n\nThis will permanently delete the test data files and cannot be undone.",
+        "completed": "Successfully deleted {count} test(s)",
+        "error": "Error occurred while deleting tests:\n{error}"
+      }
+    },
+    "plot_title_transfer": "Transfer Characteristics",
+    "plot_title_transient": "Transient Response",
+    "plot_title_output": "Output Characteristics"
+  }
+}

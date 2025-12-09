@@ -1,17 +1,19 @@
 import sys
 import os
 
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, 
-                           QVBoxLayout, QWidget, QSplitter, QLabel, 
-                           QStatusBar, QMessageBox)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget,
+                           QVBoxLayout, QWidget, QSplitter, QLabel,
+                           QStatusBar, QMessageBox, QAction, QActionGroup)
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon, QFont
-from PyQt5.QtGui import QIcon
 
 # Import our custom widgets
 from qt_app.widgets.device_control import DeviceControlWidget
 from qt_app.widgets.test_history import TestHistoryWidget
 from backend_device_control_pyqt.main import MedicalTestBackend
+
+# Import translation support
+from qt_app.i18n.translator import tr, _translator
 
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
@@ -23,19 +25,23 @@ class MainWindow(QMainWindow):
     
     def __init__(self, backend):
         super().__init__()
-        self.setWindowTitle("MiniTest-OECT 上位机")
+        self.setWindowTitle(tr("main.window_title"))
         self.setGeometry(100, 100, 1280, 800)
         self.setWindowIcon(QIcon("my_icon.ico"))  # your_icon.ico 放在资源目录下或指定绝对路径
-        
+
         # Store backend
         self.backend = backend
-        
+
         # 状态标记
         self.prev_tab_index = 0  # 用于跟踪之前的标签页
-        
+
         # Setup UI
         self.setup_ui()
-        
+        self.setup_menu_bar()
+
+        # Connect language change signal
+        _translator.language_changed.connect(self.update_translations)
+
         # Load settings
         self.settings = QSettings("OECT", "TestApp")
         self.restore_geometry()
@@ -47,32 +53,32 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Create header
-        header = QLabel("OECT 测试上位机")
-        header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("background-color: #f1f1f1; padding: 10px;")
-        header.setFont(QFont("Arial", 14, QFont.Bold))
-        main_layout.addWidget(header)
-        
+        self.header = QLabel(tr("main.app_header"))
+        self.header.setAlignment(Qt.AlignCenter)
+        self.header.setStyleSheet("background-color: #f1f1f1; padding: 10px;")
+        self.header.setFont(QFont("Arial", 14, QFont.Bold))
+        main_layout.addWidget(self.header)
+
         # Create tab widget
         self.tab_widget = QTabWidget()
         main_layout.addWidget(self.tab_widget)
-        
+
         # Create tabs
         self.device_control = DeviceControlWidget(self.backend)
         self.test_history = TestHistoryWidget(self.backend)
-        
-        self.tab_widget.addTab(self.device_control, "设备控制")
-        self.tab_widget.addTab(self.test_history, "历史测试查看")
-        
+
+        self.tab_widget.addTab(self.device_control, tr("main.tab_device_control"))
+        self.tab_widget.addTab(self.test_history, tr("main.tab_test_history"))
+
         # Connect tab change signal
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
-        
+
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("就绪")
+        self.status_bar.showMessage(tr("main.status_ready"))
     
     def on_tab_changed(self, index):
         """Handle tab change events"""
@@ -103,14 +109,57 @@ class MainWindow(QMainWindow):
     def save_geometry(self):
         """Save window geometry to settings"""
         self.settings.setValue("geometry", self.saveGeometry())
-    
+
+    def setup_menu_bar(self):
+        """Setup the menu bar with language selection"""
+        menubar = self.menuBar()
+
+        # Language menu (显示为中英文双语，确保任何语言下都能识别)
+        language_menu = menubar.addMenu("Language / 语言")
+
+        # Create action group for exclusive selection
+        language_group = QActionGroup(self)
+        language_group.setExclusive(True)
+
+        # Add language options
+        for locale, display_name in _translator.get_available_languages().items():
+            action = QAction(display_name, self, checkable=True)
+            action.setData(locale)
+
+            # Check current language
+            if locale == _translator.get_current_language():
+                action.setChecked(True)
+
+            # Connect to language change handler
+            action.triggered.connect(lambda checked, l=locale: _translator.set_language(l))
+
+            language_group.addAction(action)
+            language_menu.addAction(action)
+
+    def update_translations(self):
+        """Update all UI text when language changes"""
+        # Update window title and header
+        self.setWindowTitle(tr("main.window_title"))
+        self.header.setText(tr("main.app_header"))
+
+        # Update tab titles
+        self.tab_widget.setTabText(0, tr("main.tab_device_control"))
+        self.tab_widget.setTabText(1, tr("main.tab_test_history"))
+
+        # Update status bar
+        self.status_bar.showMessage(tr("main.status_ready"))
+
+        # Notify child widgets to update their translations
+        self.device_control.update_translations()
+        self.test_history.update_translations()
+
     def closeEvent(self, event):
         """Handle window close event"""
         # Show confirmation dialog
         reply = QMessageBox.warning(
             self,
-            "确认关闭",
-            "确定要关闭MiniTest-OECT上位机吗？\n所有正在运行的测试将被停止。",
+            tr("main.dialog.confirm_close.title"),
+            tr("main.dialog.confirm_close.message"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -155,7 +204,7 @@ def main():
         logger.info("后端系统已启动")
     except Exception as e:
         logger.error(f"后端系统启动失败: {str(e)}")
-        QMessageBox.critical(None, "错误", f"后端系统启动失败: {str(e)}")
+        QMessageBox.critical(None, tr("main.dialog.error"), f"{tr('main.log.backend_failed')} {str(e)}")
         sys.exit(1)
     
     # Create and show main window

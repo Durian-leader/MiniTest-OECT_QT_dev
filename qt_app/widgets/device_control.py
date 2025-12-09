@@ -12,9 +12,12 @@ from PyQt5.QtGui import QIcon, QColor, QBrush, QFont
 from qt_app.widgets.workflow_editor import WorkflowEditorWidget
 from qt_app.widgets.realtime_plot import RealtimePlotWidget
 
+# Import translation support
+from qt_app.i18n.translator import tr
+
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
-logger = get_module_logger() 
+logger = get_module_logger()
 #####################################################################
 
 class DeviceItemDelegate(QStyledItemDelegate):
@@ -76,10 +79,10 @@ class DeviceItemDelegate(QStyledItemDelegate):
         # Obtener descripción del dispositivo
         device_desc = device.get('description', "")
         if not device_desc:
-            device_desc = "未知设备"
-            
+            device_desc = tr("device_control.unknown_device")
+
         desc_rect = QRect(rect.left() + 10, rect.top() + 25, rect.width() - 20, 20)
-        painter.drawText(desc_rect, Qt.AlignLeft | Qt.AlignVCenter, f"描述: {device_desc}")
+        painter.drawText(desc_rect, Qt.AlignLeft | Qt.AlignVCenter, f"{tr('device_control.device_description_prefix')} {device_desc}")
         
         # Si hay un test activo, mostrar información en la parte inferior
         if has_active_test:
@@ -88,7 +91,7 @@ class DeviceItemDelegate(QStyledItemDelegate):
             painter.setFont(test_font)
             painter.setPen(QColor(0, 128, 255))  # Azul para test activo
             
-            test_info = f"正在测试: {has_active_test}"
+            test_info = f"{tr('device_control.device_testing_prefix')} {has_active_test}"
             test_rect = QRect(rect.left() + 10, rect.top() + 40, rect.width() - 20, 20)
             painter.drawText(test_rect, Qt.AlignLeft | Qt.AlignVCenter, test_info)
         else:
@@ -97,8 +100,8 @@ class DeviceItemDelegate(QStyledItemDelegate):
             port_font.setPointSize(port_font.pointSize() - 1)
             painter.setFont(port_font)
             painter.setPen(sec_color)
-            
-            port_info = f"端口: {device.get('device', '')}"
+
+            port_info = f"{tr('device_control.device_port_prefix')} {device.get('device', '')}"
             port_rect = QRect(rect.left() + 10, rect.top() + 40, rect.width() - 20, 20)
             painter.drawText(port_rect, Qt.AlignLeft | Qt.AlignVCenter, port_info)
 
@@ -232,11 +235,11 @@ class DeviceControlWidget(QWidget):
         # Left panel - Device list
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        
-        device_header = QLabel("设备看板")
-        device_header.setFont(QFont("Arial", 12, QFont.Bold))
-        left_layout.addWidget(device_header)
-        
+
+        self.device_header = QLabel(tr("device_control.device_panel"))
+        self.device_header.setFont(QFont("Arial", 12, QFont.Bold))
+        left_layout.addWidget(self.device_header)
+
         # Improved device list with custom delegate
         self.device_list = QListWidget()
         self.device_list.setMinimumWidth(200)
@@ -244,17 +247,17 @@ class DeviceControlWidget(QWidget):
         self.device_list.setSpacing(5)  # Add spacing between items
         self.device_list.currentItemChanged.connect(self.on_device_selected)
         left_layout.addWidget(self.device_list)
-        
-        refresh_btn = QPushButton("刷新设备")
-        refresh_btn.clicked.connect(self.refresh_devices)
-        left_layout.addWidget(refresh_btn)
+
+        self.refresh_btn = QPushButton(tr("device_control.refresh_button"))
+        self.refresh_btn.clicked.connect(self.refresh_devices)
+        left_layout.addWidget(self.refresh_btn)
         
         # Middle panel - Workflow configuration
         middle_panel = QWidget()
         middle_layout = QVBoxLayout(middle_panel)
-        
-        workflow_header = QGroupBox("工作流配置")
-        workflow_layout = QVBoxLayout(workflow_header)
+
+        self.workflow_header = QGroupBox(tr("device_control.workflow_config"))
+        workflow_layout = QVBoxLayout(self.workflow_header)
         
         # Test information section with auto-naming option
         test_info_frame = QFrame()
@@ -266,43 +269,47 @@ class DeviceControlWidget(QWidget):
         form_layout = QFormLayout()
         
         # Auto-naming checkbox
-        self.auto_naming_check = QCheckBox("自动生成测试名称")
+        self.auto_naming_check = QCheckBox(tr("device_control.auto_naming"))
         self.auto_naming_check.setChecked(self.auto_naming)
         self.auto_naming_check.toggled.connect(self.toggle_auto_naming)
         form_layout.addRow("", self.auto_naming_check)
-        
+
         # Sync workflow checkbox
-        self.sync_workflow_check = QCheckBox("所有设备同步执行工作流")
+        self.sync_workflow_check = QCheckBox(tr("device_control.sync_workflow"))
         self.sync_workflow_check.setChecked(False)
         self.sync_workflow_check.toggled.connect(self.toggle_sync_workflow)
-        self.sync_workflow_check.setToolTip("勾选后，所有设备将使用相同的工作流，并且每个步骤同步执行")
+        self.sync_workflow_check.setToolTip(tr("device_control.sync_workflow_tooltip"))
         form_layout.addRow("", self.sync_workflow_check)
-        
+
         # Test name field with improved styling
         self.test_name_edit = QLineEdit()
-        self.test_name_edit.setPlaceholderText("输入测试名称")
+        self.test_name_edit.setPlaceholderText(tr("device_control.test_name_placeholder"))
         self.test_name_edit.setEnabled(False)  # 初始化时禁用，因为默认启用自动命名
         self.test_name_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; }")
         self.test_name_edit.textChanged.connect(self.on_test_name_changed)
-        form_layout.addRow("测试名称:", self.test_name_edit)
-        
+        self.test_name_label = QLabel(tr("device_control.test_name"))
+        form_layout.addRow(self.test_name_label, self.test_name_edit)
+
         # Test description field with improved styling
         self.test_desc_edit = QLineEdit()
-        self.test_desc_edit.setPlaceholderText("输入测试描述（可选）")
+        self.test_desc_edit.setPlaceholderText(tr("device_control.test_description_placeholder"))
         self.test_desc_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
-        form_layout.addRow("测试描述:", self.test_desc_edit)
-        
+        self.test_desc_label = QLabel(tr("device_control.test_description"))
+        form_layout.addRow(self.test_desc_label, self.test_desc_edit)
+
         # Chip ID field with improved styling
         self.chip_id_edit = QLineEdit()
-        self.chip_id_edit.setPlaceholderText("输入芯片ID（可选）")
+        self.chip_id_edit.setPlaceholderText(tr("device_control.chip_id_placeholder"))
         self.chip_id_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
-        form_layout.addRow("芯片ID:", self.chip_id_edit)
-        
+        self.chip_id_label = QLabel(tr("device_control.chip_id"))
+        form_layout.addRow(self.chip_id_label, self.chip_id_edit)
+
         # Device number field with improved styling
         self.device_number_edit = QLineEdit()
-        self.device_number_edit.setPlaceholderText("输入器件编号（可选）")
+        self.device_number_edit.setPlaceholderText(tr("device_control.device_number_placeholder"))
         self.device_number_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
-        form_layout.addRow("器件编号:", self.device_number_edit)
+        self.device_number_label = QLabel(tr("device_control.device_number"))
+        form_layout.addRow(self.device_number_label, self.device_number_edit)
         
         # Add form layout to test info layout
         test_info_layout.addLayout(form_layout)
@@ -310,32 +317,32 @@ class DeviceControlWidget(QWidget):
         # Button toolbar for workflow operations - moved inside test info frame
         button_toolbar_layout = QHBoxLayout()
         
-        start_btn = QPushButton("开始测试")
-        start_btn.setIcon(QIcon.fromTheme("media-playback-start"))
-        start_btn.setStyleSheet("QPushButton { padding: 8px 16px; font-weight: bold; background-color: #4CAF50; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #45a049; }")
-        start_btn.clicked.connect(self.start_workflow)
-        button_toolbar_layout.addWidget(start_btn)
-        
-        stop_btn = QPushButton("停止测试")
-        stop_btn.setIcon(QIcon.fromTheme("media-playback-stop"))
-        stop_btn.setStyleSheet("QPushButton { padding: 8px 16px; font-weight: bold; background-color: #f44336; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #da190b; }")
-        stop_btn.clicked.connect(self.stop_workflow)
-        button_toolbar_layout.addWidget(stop_btn)
-        
+        self.start_btn = QPushButton(tr("device_control.start_test"))
+        self.start_btn.setIcon(QIcon.fromTheme("media-playback-start"))
+        self.start_btn.setStyleSheet("QPushButton { padding: 8px 16px; font-weight: bold; background-color: #4CAF50; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #45a049; }")
+        self.start_btn.clicked.connect(self.start_workflow)
+        button_toolbar_layout.addWidget(self.start_btn)
+
+        self.stop_btn = QPushButton(tr("device_control.stop_test"))
+        self.stop_btn.setIcon(QIcon.fromTheme("media-playback-stop"))
+        self.stop_btn.setStyleSheet("QPushButton { padding: 8px 16px; font-weight: bold; background-color: #f44336; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #da190b; }")
+        self.stop_btn.clicked.connect(self.stop_workflow)
+        button_toolbar_layout.addWidget(self.stop_btn)
+
         # Add some spacing
         button_toolbar_layout.addSpacing(20)
-        
-        export_btn = QPushButton("导出工作流")
-        export_btn.setIcon(QIcon.fromTheme("document-save"))
-        export_btn.setStyleSheet("QPushButton { padding: 8px 16px; background-color: #2196F3; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #1976D2; }")
-        export_btn.clicked.connect(self.export_workflow)
-        button_toolbar_layout.addWidget(export_btn)
-        
-        import_btn = QPushButton("导入工作流")
-        import_btn.setIcon(QIcon.fromTheme("document-open"))
-        import_btn.setStyleSheet("QPushButton { padding: 8px 16px; background-color: #FF9800; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #F57C00; }")
-        import_btn.clicked.connect(self.import_workflow)
-        button_toolbar_layout.addWidget(import_btn)
+
+        self.export_btn = QPushButton(tr("device_control.export_workflow"))
+        self.export_btn.setIcon(QIcon.fromTheme("document-save"))
+        self.export_btn.setStyleSheet("QPushButton { padding: 8px 16px; background-color: #2196F3; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #1976D2; }")
+        self.export_btn.clicked.connect(self.export_workflow)
+        button_toolbar_layout.addWidget(self.export_btn)
+
+        self.import_btn = QPushButton(tr("device_control.import_workflow"))
+        self.import_btn.setIcon(QIcon.fromTheme("document-open"))
+        self.import_btn.setStyleSheet("QPushButton { padding: 8px 16px; background-color: #FF9800; color: white; border: none; border-radius: 4px; } QPushButton:hover { background-color: #F57C00; }")
+        self.import_btn.clicked.connect(self.import_workflow)
+        button_toolbar_layout.addWidget(self.import_btn)
         
         # Add stretch to left-align buttons
         button_toolbar_layout.addStretch()
@@ -350,7 +357,7 @@ class DeviceControlWidget(QWidget):
         self.workflow_editor.workflow_updated.connect(self.on_workflow_updated)  # 新增：监听工作流更新
         workflow_layout.addWidget(self.workflow_editor)
         
-        middle_layout.addWidget(workflow_header)
+        middle_layout.addWidget(self.workflow_header)
         
         # Device info section
         self.device_info = QLabel("请选择一个设备")
@@ -359,25 +366,25 @@ class DeviceControlWidget(QWidget):
         middle_layout.addWidget(self.device_info)
         
         # Status label for data reception
-        self.data_status = QLabel("No data received")
+        self.data_status = QLabel(tr("device_control.no_data_received"))
         self.data_status.setAlignment(Qt.AlignCenter)
         self.data_status.setStyleSheet("font-size: 10px; color: #888;")
         middle_layout.addWidget(self.data_status)
-        
+
         # Right panel - Real-time plot
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        
-        plot_header = QLabel("实时监测")
-        plot_header.setFont(QFont("Arial", 12, QFont.Bold))
-        right_layout.addWidget(plot_header)
-        
+
+        self.plot_header = QLabel(tr("device_control.realtime_monitor"))
+        self.plot_header.setFont(QFont("Arial", 12, QFont.Bold))
+        right_layout.addWidget(self.plot_header)
+
         self.plot_container = QWidget()
         self.plot_layout = QVBoxLayout(self.plot_container)
         self.plot_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         # Initial placeholder
-        self.placeholder_label = QLabel("请选择设备并开始测试")
+        self.placeholder_label = QLabel(tr("device_control.select_device_and_start"))
         self.placeholder_label.setAlignment(Qt.AlignCenter)
         self.placeholder_label.setStyleSheet("color: #888; font-size: 14px;")
         self.plot_layout.addWidget(self.placeholder_label)
@@ -404,10 +411,10 @@ class DeviceControlWidget(QWidget):
             
             # Update test name based on auto-naming setting
             if enabled:
-                self.test_name_edit.setText('（点击开始测试生成）')
-            elif not self.test_name_edit.text() or self.test_name_edit.text() == '（点击开始测试生成）':
+                self.test_name_edit.setText(tr("device_control.auto_generated_name_suffix"))
+            elif not self.test_name_edit.text() or self.test_name_edit.text() in ['（点击开始测试生成）', '(Click start test to generate)']:
                 # If enabling manual naming and no custom name exists, provide a default
-                self.test_name_edit.setText(f"测试-{self.selected_port}")
+                self.test_name_edit.setText(tr("device_control.auto_test_name_format", port=self.selected_port))
     
     def toggle_sync_workflow(self, enabled):
         """Toggle synchronized workflow execution"""
@@ -501,7 +508,7 @@ class DeviceControlWidget(QWidget):
     
     def initialize_default_test_info(self, port):
         """为新设备初始化默认测试信息"""
-        self.test_name_edit.setText('（点击开始测试生成）')
+        self.test_name_edit.setText(tr("device_control.auto_generated_name_suffix"))
         self.test_desc_edit.setText('')
         self.chip_id_edit.setText('')
         self.device_number_edit.setText('')
@@ -511,7 +518,7 @@ class DeviceControlWidget(QWidget):
         
         # 保存默认设置
         default_info = {
-            'test_name': '（点击开始测试生成）',
+            'test_name': tr("device_control.auto_generated_name_suffix"),
             'test_desc': '',
             'chip_id': '',
             'device_number': '',
@@ -630,11 +637,11 @@ class DeviceControlWidget(QWidget):
         self.selected_port = port
         
         # Update device info
-        info_text = f"当前设备: {device['description']}"
+        info_text = f"{tr('device_control.current_device_prefix')} {device['description']}"
         if device['device_id']:
-            info_text += f"<br><small>设备 ID: {device['device_id']}</small>"
+            info_text += f"<br><small>{tr('device_control.device_id_prefix')} {device['device_id']}</small>"
         if port in self.current_test_ids:
-            info_text += f"<br><small>测试 ID: {self.current_test_ids[port]}</small>"
+            info_text += f"<br><small>{tr('device_control.test_id_prefix')} {self.current_test_ids[port]}</small>"
         
         self.device_info.setText(info_text)
         
@@ -707,14 +714,11 @@ class DeviceControlWidget(QWidget):
             
             device_name = device_info.get('device_id', self.selected_port) if device_info else self.selected_port
             
-            # 弹出警告对话框
+            # 弹出警告对话框（已翻译）
             reply = QMessageBox.question(
-                self, 
-                "设备正在测试中", 
-                f"设备 {device_name} 正在进行测试 (ID: {current_test_id})\n\n"
-                f"您可以选择:\n"
-                f"• 点击'是'停止当前测试并开启新的测试\n"
-                f"• 点击'否'保持当前测试", 
+                self,
+                tr("device_control.dialog.device_testing.title"),
+                tr("device_control.dialog.device_testing.message", device_name=device_name, test_id=current_test_id),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -736,14 +740,14 @@ class DeviceControlWidget(QWidget):
         if self.selected_port not in self.current_test_ids:
             self._execute_start_workflow()
         else:
-            QMessageBox.warning(self, "Warning", "停止测试失败，请稍后重试")
+            QMessageBox.warning(self, tr("main.dialog.warning"), tr("device_control.dialog.stop_test_failed"))
     
     def _execute_start_workflow(self):
         """执行启动工作流的实际逻辑（原start_workflow的主要部分）"""
         # Get workflow steps
         steps = self.workflow_editor.get_steps()
         if not steps:
-            QMessageBox.warning(self, "Warning", "请先配置工作流步骤")
+            QMessageBox.warning(self, tr("main.dialog.warning"), tr("device_control.dialog.no_workflow_steps"))
             return
         
         # Store the workflow for this device
@@ -774,7 +778,7 @@ class DeviceControlWidget(QWidget):
         # Get test name and description from input fields
         test_name = self.test_name_edit.text().strip()
         if not test_name:  # If empty, use default
-            test_name = f"测试-{device_info['device_id'] or self.selected_port}"
+            test_name = tr("device_control.auto_test_name_format", port=device_info['device_id'] or self.selected_port)
             self.test_name_edit.setText(test_name)
             
         test_description = self.test_desc_edit.text().strip()
@@ -820,11 +824,11 @@ class DeviceControlWidget(QWidget):
                 
                 # Update device info to show test ID
                 if device_info:
-                    info_text = f"当前设备: {device_info['description']}"
+                    info_text = f"{tr('device_control.current_device_prefix')} {device_info['description']}"
                     if device_info['device_id']:
-                        info_text += f"<br><small>设备 ID: {device_info['device_id']}</small>"
-                    info_text += f"<br><small>测试 ID: {test_id}</small>"
-                    info_text += f"<br><small>测试名称: {test_name}</small>"
+                        info_text += f"<br><small>{tr('device_control.device_id_prefix')} {device_info['device_id']}</small>"
+                    info_text += f"<br><small>{tr('device_control.test_id_prefix')} {test_id}</small>"
+                    info_text += f"<br><small>{tr('device_control.test_name_prefix', default='Test Name:')} {test_name}</small>"
                     self.device_info.setText(info_text)
                 
                 
@@ -839,7 +843,7 @@ class DeviceControlWidget(QWidget):
         # Get workflow steps
         steps = self.workflow_editor.get_steps()
         if not steps:
-            QMessageBox.warning(self, "Warning", "请先配置工作流步骤")
+            QMessageBox.warning(self, tr("main.dialog.warning"), tr("device_control.dialog.no_workflow_steps"))
             return
         
         # Get all available devices
@@ -901,7 +905,7 @@ class DeviceControlWidget(QWidget):
                     timestamp = time.strftime('%Y%m%d%H%M%S')
                     test_name = f"{device_id}_{timestamp}"
                 else:
-                    test_name = device_test_info.get('test_name', '') or f"测试-{device_id}"
+                    test_name = device_test_info.get('test_name', '') or tr("device_control.auto_test_name_format", port=device_id)
                 
                 # Use device-specific information
                 test_description = device_test_info.get('test_desc', '')
@@ -962,14 +966,14 @@ class DeviceControlWidget(QWidget):
         
         # Show results
         if success_count > 0:
-            msg = f"已为 {success_count} 个设备启动同步测试"
+            msg = tr("device_control.dialog.sync_test_started_detail", count=success_count)
             if failed_devices:
-                msg += f"\n\n失败的设备:\n"
+                msg += f"\n\n{tr('device_control.dialog.sync_failed_list')}:\n"
                 for device_id, reason in failed_devices:
-                    msg += f"- {device_id}: {reason}\n"
-            QMessageBox.information(self, "同步测试已启动", msg)
+                    msg += tr("device_control.dialog.sync_failed_item", device=device_id, reason=reason) + "\n"
+            QMessageBox.information(self, tr("main.dialog.success"), msg)
         else:
-            QMessageBox.critical(self, "Error", "无法启动任何设备的测试")
+            QMessageBox.critical(self, tr("main.dialog.error"), tr("device_control.dialog.no_devices_started"))
     
     def stop_sync_workflow(self):
         """Stop synchronized workflow for all devices"""
@@ -1028,7 +1032,7 @@ class DeviceControlWidget(QWidget):
             return
         
         if self.selected_port not in self.current_test_ids:
-            QMessageBox.warning(self, "Warning", "该设备没有正在运行的测试")
+            QMessageBox.warning(self, tr("main.dialog.warning"), tr("device_control.dialog.no_active_test"))
             return
         
         try:
@@ -1055,17 +1059,17 @@ class DeviceControlWidget(QWidget):
                         break
                 
                 if device_info:
-                    info_text = f"当前设备: {device_info['description']}"
+                    info_text = f"{tr('device_control.current_device_prefix')} {device_info['description']}"
                     if device_info['device_id']:
-                        info_text += f"<br><small>设备 ID: {device_info['device_id']}</small>"
+                        info_text += f"<br><small>{tr('device_control.device_id_prefix')} {device_info['device_id']}</small>"
                     self.device_info.setText(info_text)
                 
-                QMessageBox.information(self, "Success", "测试已停止")
+                QMessageBox.information(self, tr("main.dialog.success"), tr("device_control.dialog.test_stopped"))
             else:
-                QMessageBox.warning(self, "Error", f"停止测试失败: {result.get('reason', '未知错误')}")
+                QMessageBox.warning(self, tr("main.dialog.error"), tr("device_control.dialog.stop_test_failed_reason", reason=result.get('reason', '未知错误')))
         
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"停止测试时发生错误: {str(e)}")
+            QMessageBox.critical(self, tr("main.dialog.error"), tr("device_control.dialog.stop_test_error", error=str(e)))
     
     def export_workflow(self):
         """Export workflow to JSON file"""
@@ -1091,24 +1095,24 @@ class DeviceControlWidget(QWidget):
                 with open(file_path, 'w') as f:
                     json.dump(steps, f, indent=2)
                 
-                QMessageBox.information(self, "Success", f"工作流已保存到 {file_path}")
+                QMessageBox.information(self, tr("main.dialog.success"), tr("device_control.dialog.workflow_exported", path=file_path))
             
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"导出工作流时发生错误: {str(e)}")
+                QMessageBox.critical(self, tr("main.dialog.error"), tr("device_control.dialog.export_workflow_error", error=str(e)))
     
     def import_workflow(self):
         """Import workflow from JSON file"""
         if not self.selected_port:
-            QMessageBox.warning(self, "Warning", "请先选择一个设备")
+            QMessageBox.warning(self, tr("main.dialog.warning"), tr("device_control.dialog.no_device_selected"))
             return
         
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "导入工作流", "", "JSON Files (*.json)"
+            self, tr("device_control.dialog.import_title"), "", "JSON Files (*.json)"
         )
         
         if file_path:
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path, 'r', encoding='utf-8') as f:
                     steps = json.load(f)
                 
                 # Validate steps
@@ -1125,10 +1129,10 @@ class DeviceControlWidget(QWidget):
                 # Store for current device
                 self.workflows[self.selected_port] = combined_steps
                 
-                QMessageBox.information(self, "Success", f"工作流已导入并添加到当前工作流后面 (添加了 {len(steps)} 个步骤)")
+                QMessageBox.information(self, tr("main.dialog.success"), tr("device_control.dialog.workflow_imported", count=len(steps)))
             
             except Exception as e:
-                QMessageBox.critical(self, "Error", f"导入工作流时发生错误: {str(e)}")
+                QMessageBox.critical(self, tr("main.dialog.error"), tr("device_control.dialog.import_workflow_error", error=str(e)))
     
     
     def update_real_time_data(self):
@@ -1320,14 +1324,14 @@ class DeviceControlWidget(QWidget):
                 break
         
         if device_info:
-            info_text = f"当前设备: {device_info['description']}"
+            info_text = f"{tr('device_control.current_device_prefix')} {device_info['description']}"
             if device_info['device_id']:
-                info_text += f"<br><small>设备 ID: {device_info['device_id']}</small>"
+                info_text += f"<br><small>{tr('device_control.device_id_prefix')} {device_info['device_id']}</small>"
             
             # 检查是否还有活跃测试
             if self.selected_port in self.current_test_ids:
                 test_id = self.current_test_ids[self.selected_port]
-                info_text += f"<br><small>测试 ID: {test_id}</small>"
+                info_text += f"<br><small>{tr('device_control.test_id_prefix')} {test_id}</small>"
             
             self.device_info.setText(info_text)
 
@@ -1341,3 +1345,69 @@ class DeviceControlWidget(QWidget):
                 logger.debug(f"设备 {port}: {test_id}")
         else:
             logger.debug("当前没有活跃测试")
+
+    def update_translations(self):
+        """Update all UI text when language changes"""
+        # Update headers and labels
+        self.device_header.setText(tr("device_control.device_panel"))
+        self.workflow_header.setTitle(tr("device_control.workflow_config"))
+        self.plot_header.setText(tr("device_control.realtime_monitor"))
+
+        # Update buttons
+        self.refresh_btn.setText(tr("device_control.refresh_button"))
+        self.start_btn.setText(tr("device_control.start_test"))
+        self.stop_btn.setText(tr("device_control.stop_test"))
+        self.export_btn.setText(tr("device_control.export_workflow"))
+        self.import_btn.setText(tr("device_control.import_workflow"))
+
+        # Update checkboxes
+        self.auto_naming_check.setText(tr("device_control.auto_naming"))
+        self.sync_workflow_check.setText(tr("device_control.sync_workflow"))
+        self.sync_workflow_check.setToolTip(tr("device_control.sync_workflow_tooltip"))
+
+        # Update form labels
+        self.test_name_label.setText(tr("device_control.test_name"))
+        self.test_desc_label.setText(tr("device_control.test_description"))
+        self.chip_id_label.setText(tr("device_control.chip_id"))
+        self.device_number_label.setText(tr("device_control.device_number"))
+
+        # Update placeholders
+        self.test_name_edit.setPlaceholderText(tr("device_control.test_name_placeholder"))
+        self.test_desc_edit.setPlaceholderText(tr("device_control.test_description_placeholder"))
+        self.chip_id_edit.setPlaceholderText(tr("device_control.chip_id_placeholder"))
+        self.device_number_edit.setPlaceholderText(tr("device_control.device_number_placeholder"))
+
+        # Update auto-generated name/suffix if applicable
+        current_name = self.test_name_edit.text().strip()
+        suffixes = [
+            '（点击开始测试生成）',
+            '(Click start test to generate)',
+            tr("device_control.auto_generated_name_suffix")
+        ]
+        auto_names_for_port = []
+        if self.selected_port:
+            auto_names_for_port = [
+                tr("device_control.auto_test_name_format", port=self.selected_port),
+                f"测试-{self.selected_port}",
+                f"Test-{self.selected_port}"
+            ]
+        if self.auto_naming:
+            self.test_name_edit.setText(tr("device_control.auto_generated_name_suffix"))
+        elif (not current_name) or (current_name in suffixes) or (current_name in auto_names_for_port):
+            # Only replace if it was an auto-generated name/suffix
+            self.test_name_edit.setText(tr("device_control.auto_test_name_format", port=self.selected_port or ""))
+
+        # Update status labels
+        self.data_status.setText(tr("device_control.no_data_received"))
+        self.placeholder_label.setText(tr("device_control.select_device_and_start"))
+
+        # Update selected device info
+        self.update_selected_device_info()
+
+        # Update child widgets
+        self.workflow_editor.update_translations()
+        for plot_widget in self.plot_widgets.values():
+            plot_widget.update_translations()
+
+        # Force device list to repaint (for DeviceItemDelegate translations)
+        self.device_list.viewport().update()
