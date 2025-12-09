@@ -235,23 +235,26 @@ class RealtimePlotWidget(QWidget):
         self.data_y = np.array([])
         self.new_point_buffer_x = []
         self.new_point_buffer_y = []
-        
+
         # 清除多曲线数据
         self.output_curves_data = {}
         self.current_output_gate_voltage = None
         self.output_data_buffer = []
         self.expected_gate_voltages = set()
-        
+
         # 重置统计
         self.total_received_points = 0
-        
+
+        # 清除图例
+        self.legend.clear()
+
         # 清除所有绘图对象
         if self.single_plot_line:
             self.single_plot_line.setData([], [])
-        
+
         for line in self.plot_lines.values():
             line.setData([], [])
-        
+
         # 更新UI
         self.data_count_label.setText(tr("realtime.points_label", count=0))
         self.debug_label.setText(tr("realtime.chart_cleared"))
@@ -434,11 +437,22 @@ class RealtimePlotWidget(QWidget):
         
         # 确保有对应的绘图曲线
         if curve_name not in self.plot_lines:
-            # 创建新的绘图曲线
-            colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k', 'orange', 'purple', 'brown']
+            # 创建新的绘图曲线 - 使用深色高对比度颜色（避免浅色）
+            colors = [
+                '#0000FF',  # 蓝色
+                '#FF0000',  # 红色
+                '#00AA00',  # 深绿色
+                '#8B4513',  # 棕色
+                '#9400D3',  # 深紫色
+                '#FF8C00',  # 深橙色
+                '#000000',  # 黑色
+                '#DC143C',  # 深红色
+                '#006400',  # 深绿色
+                '#4B0082',  # 靛蓝色
+            ]
             color_idx = len(self.plot_lines) % len(colors)
-            
-            line = self.plot_widget.plot([], [], 
+
+            line = self.plot_widget.plot([], [],
                                        pen=pg.mkPen(color=colors[color_idx], width=2),
                                        name=curve_name)
             self.plot_lines[curve_name] = line
@@ -560,19 +574,50 @@ class RealtimePlotWidget(QWidget):
         byte_data = decode_hex_to_bytes(hex_data)
         if not byte_data:
             return
-        
+
         # 解析新数据点
         new_points = decode_bytes_to_data(byte_data, mode)
-        
-        # 添加数据点到缓冲区
+
+        # 添加数据点到缓冲区，带数据验证
         if new_points:
             self.total_received_points += len(new_points)
-            
+            valid_points = 0
+
             for point in new_points:
-                self.new_point_buffer_x.append(point[0])
-                self.new_point_buffer_y.append(point[1])
-            
-            self.debug_label.setText(tr("realtime.added_points", count=len(new_points), mode=mode))
+                x_val = point[0]
+                y_val = point[1]
+
+                # 数据验证：检查有效性
+                if not (np.isfinite(x_val) and np.isfinite(y_val)):
+                    logger.warning(f"跳过非有效数值: x={x_val}, y={y_val}")
+                    continue
+
+                # 根据模式验证范围
+                if mode == 'transient':
+                    # 时间应该是正数且在合理范围内（例如 < 1000秒）
+                    if x_val < 0 or x_val > 10000:
+                        logger.warning(f"跳过异常时间值: {x_val}s")
+                        continue
+                else:  # transfer
+                    # 电压范围检查
+                    if abs(x_val) > 5.0:
+                        logger.warning(f"跳过异常电压值: {x_val}V")
+                        continue
+
+                # 电流范围检查
+                if abs(y_val) > 1.0:
+                    logger.warning(f"跳过异常电流值: {y_val}A")
+                    continue
+
+                # 数据有效，添加到缓冲区
+                self.new_point_buffer_x.append(x_val)
+                self.new_point_buffer_y.append(y_val)
+                valid_points += 1
+
+            if valid_points > 0:
+                self.debug_label.setText(tr("realtime.added_points", count=valid_points, mode=mode))
+            else:
+                logger.warning(f"所有 {len(new_points)} 个数据点都被过滤")
     
     def process_output_step(self, hex_data):
         """处理output步骤 - 使用多曲线逻辑"""
@@ -637,51 +682,77 @@ class RealtimePlotWidget(QWidget):
         """立即处理output数据"""
         gate_voltage = output_metadata.get("gate_voltage", 0)
         curve_name = f"Id(Vg={gate_voltage}mV)"
-        
+
         # 解析hex数据
         byte_data = decode_hex_to_bytes(hex_data)
         if not byte_data:
             return
-        
+
         # 解析新数据点
         new_points = decode_bytes_to_data(byte_data, mode='transfer')  # output使用transfer格式
-        
+
         if new_points and curve_name in self.output_curves_data:
-            # 添加数据点到对应曲线
+            # 添加数据点到对应曲线，并进行额外验证
+            valid_points_added = 0
             for point in new_points:
-                self.output_curves_data[curve_name]['x'].append(point[0])
-                self.output_curves_data[curve_name]['y'].append(point[1])
-            
-            # 更新统计
+                # 额外的数据验证层：过滤异常值
+                voltage = point[0]
+                current = point[1]
+
+                # 检查是否为有效数值（不是NaN或Inf）
+                if not (np.isfinite(voltage) and np.isfinite(current)):
+                    logger.warning(f"跳过非有效数值: voltage={voltage}, current={current}")
+                    continue
+
+                # 检查电压范围（根据实际应用调整）
+                if abs(voltage) > 5.0:
+                    logger.warning(f"跳过异常电压值 {voltage}V in curve {curve_name}")
+                    continue
+
+                # 检查电流范围
+                if abs(current) > 1.0:
+                    logger.warning(f"跳过异常电流值 {current}A in curve {curve_name}")
+                    continue
+
+                # 数据有效，添加到曲线
+                self.output_curves_data[curve_name]['x'].append(voltage)
+                self.output_curves_data[curve_name]['y'].append(current)
+                valid_points_added += 1
+
+            # 更新统计（只计数接收到的点，不管是否有效）
             self.total_received_points += len(new_points)
-            
-            # 内存保护
-            if self.use_circular_buffer:
-                max_points_per_curve = self.MAX_POINTS // max(1, len(self.output_curves_data))
-                for curve_data in self.output_curves_data.values():
-                    if len(curve_data['x']) > max_points_per_curve:
-                        curve_data['x'] = curve_data['x'][-max_points_per_curve:]
-                        curve_data['y'] = curve_data['y'][-max_points_per_curve:]
-            
-            # 立即更新曲线显示
-            if curve_name in self.plot_lines and self.output_curves_data[curve_name]['x']:
-                self.plot_lines[curve_name].setData(
-                    self.output_curves_data[curve_name]['x'], 
-                    self.output_curves_data[curve_name]['y']
-                )
-            
-            # 关键修复：确保output数据显示时自动调整范围
-            # 仅在接收到第一批数据时触发，避免频繁调整
-            total_curves_with_data = sum(1 for data in self.output_curves_data.values() if data['x'])
-            if total_curves_with_data <= 2 and len(self.output_curves_data[curve_name]['x']) <= 50:
-                self.plot_widget.enableAutoRange(x=True, y=True)
-            
-            # 更新数据计数
-            total_points = sum(len(data['x']) for data in self.output_curves_data.values())
-            curve_count = len(self.output_curves_data)
-            self.data_count_label.setText(tr("realtime.points_label_curves", points=total_points, curves=curve_count))
-            
-            logger.info(f"添加 {len(new_points)} 个数据点到 {curve_name}")
+
+            # 如果有有效数据点被添加
+            if valid_points_added > 0:
+                # 内存保护
+                if self.use_circular_buffer:
+                    max_points_per_curve = self.MAX_POINTS // max(1, len(self.output_curves_data))
+                    for curve_data in self.output_curves_data.values():
+                        if len(curve_data['x']) > max_points_per_curve:
+                            curve_data['x'] = curve_data['x'][-max_points_per_curve:]
+                            curve_data['y'] = curve_data['y'][-max_points_per_curve:]
+
+                # 立即更新曲线显示
+                if curve_name in self.plot_lines and self.output_curves_data[curve_name]['x']:
+                    self.plot_lines[curve_name].setData(
+                        self.output_curves_data[curve_name]['x'],
+                        self.output_curves_data[curve_name]['y']
+                    )
+
+                # 关键修复：确保output数据显示时自动调整范围
+                # 仅在接收到第一批数据时触发，避免频繁调整
+                total_curves_with_data = sum(1 for data in self.output_curves_data.values() if data['x'])
+                if total_curves_with_data <= 2 and len(self.output_curves_data[curve_name]['x']) <= 50:
+                    self.plot_widget.enableAutoRange(x=True, y=True)
+
+                # 更新数据计数
+                total_points = sum(len(data['x']) for data in self.output_curves_data.values())
+                curve_count = len(self.output_curves_data)
+                self.data_count_label.setText(tr("realtime.points_label_curves", points=total_points, curves=curve_count))
+
+                logger.info(f"添加 {valid_points_added}/{len(new_points)} 个有效数据点到 {curve_name}")
+            else:
+                logger.warning(f"所有 {len(new_points)} 个数据点都被过滤，未添加到 {curve_name}")
     
     def process_output_fallback(self, hex_data):
         """处理output的向后兼容模式（单曲线）"""
@@ -695,17 +766,37 @@ class RealtimePlotWidget(QWidget):
         byte_data = decode_hex_to_bytes(hex_data)
         if not byte_data:
             return
-        
+
         new_points = decode_bytes_to_data(byte_data, mode='transfer')
-        
+
         if new_points:
             self.total_received_points += len(new_points)
-            
+            valid_points = 0
+
             for point in new_points:
-                self.new_point_buffer_x.append(point[0])
-                self.new_point_buffer_y.append(point[1])
-            
-            self.debug_label.setText(tr("realtime.added_points_fallback", count=len(new_points)))
+                x_val = point[0]
+                y_val = point[1]
+
+                # 数据验证
+                if not (np.isfinite(x_val) and np.isfinite(y_val)):
+                    logger.warning(f"跳过非有效数值: x={x_val}, y={y_val}")
+                    continue
+
+                if abs(x_val) > 5.0:
+                    logger.warning(f"跳过异常电压值: {x_val}V")
+                    continue
+
+                if abs(y_val) > 1.0:
+                    logger.warning(f"跳过异常电流值: {y_val}A")
+                    continue
+
+                # 数据有效，添加到缓冲区
+                self.new_point_buffer_x.append(x_val)
+                self.new_point_buffer_y.append(y_val)
+                valid_points += 1
+
+            if valid_points > 0:
+                self.debug_label.setText(tr("realtime.added_points_fallback", count=valid_points))
     
     def update_plot(self):
         """更新图表绘图"""

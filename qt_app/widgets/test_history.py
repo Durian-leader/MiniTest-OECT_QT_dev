@@ -1368,13 +1368,24 @@ class TestHistoryWidget(QWidget):
         self.plot_widget.setTitle(tr("history.plot_title_output"))
         self.last_plot_type = "output"
         
-        # 绘制每条曲线
-        colors = ['b', 'r', 'g', 'c', 'm', 'y', 'k', 'orange', 'purple', 'brown']
-        
+        # 绘制每条曲线 - 使用深色高对比度颜色（避免浅色）
+        colors = [
+            '#0000FF',  # 蓝色
+            '#FF0000',  # 红色
+            '#00AA00',  # 深绿色
+            '#8B4513',  # 棕色
+            '#9400D3',  # 深紫色
+            '#FF8C00',  # 深橙色
+            '#000000',  # 黑色
+            '#DC143C',  # 深红色
+            '#006400',  # 深绿色
+            '#4B0082',  # 靛蓝色
+        ]
+
         for i, (curve_name, y_values) in enumerate(curves.items()):
             if len(y_values) == len(x_values):
                 color = colors[i % len(colors)]
-                line = self.plot_widget.plot(x_values, y_values, 
+                line = self.plot_widget.plot(x_values, y_values,
                                            pen=pg.mkPen(color=color, width=2),
                                            name=curve_name)
                 self.plot_lines[curve_name] = line

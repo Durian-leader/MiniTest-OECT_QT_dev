@@ -151,23 +151,33 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
                     # Process transfer/output data
                     # Voltage (2 bytes, little endian, signed)
                     voltage_raw = int.from_bytes(byte_data[i:i+2], byteorder='little', signed=True)
-                    
+
                     if mode == 'output':
                         # For output, this is drain voltage
                         voltage = voltage_raw / 1000.0  # Convert to volts
                     else:
                         # For transfer, this is gate voltage
                         voltage = voltage_raw / 1000.0  # Convert to volts
-                    
+
                     # Current (3 bytes)
                     current_raw = int.from_bytes(b'\x00' + byte_data[i+2:i+5], byteorder='big')
                     current_value = -ads_cal_voltage(current_raw) / 100.0 - bias_current
-                    
+
+                    # *** 数据验证：过滤异常值 ***
+                    # 电压合理范围：-5V 到 +5V（根据实际应用调整）
+                    # 电流合理范围：-1A 到 +1A
+                    if abs(voltage) > 5.0:
+                        logger.warning(f"跳过异常电压值: {voltage}V at packet {packets_processed}")
+                        continue
+                    if abs(current_value) > 1.0:
+                        logger.warning(f"跳过异常电流值: {current_value}A at packet {packets_processed}")
+                        continue
+
                     # Add data point
                     result.append([voltage, current_value])
-                    
+
                     packets_processed += 1
-                    
+
                     # Print the first few data points for debugging
                     if packets_processed <= 3:
                         logger.debug(f"数据点 {packets_processed}: Voltage={voltage}V, Current={current_value}A")
