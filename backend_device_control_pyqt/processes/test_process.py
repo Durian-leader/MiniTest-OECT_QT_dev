@@ -45,6 +45,7 @@ MSG_TEST_ERROR = "test_error"
 MSG_SAVE_DATA = "save_data"
 MSG_DEVICE_STATUS = "device_status"
 MSG_SHUTDOWN = "shutdown"
+STOP_WAIT_TIMEOUT = 3.0
 
 class ProcessDataBridge:
     """进程间数据桥接器，替代原websocket桥接器"""
@@ -230,6 +231,7 @@ class TestManager:
         # 测试结果记录
         self.test_results = {}  # {test_id: result_dict}
         self.device_status = {}  # {device_id: status_dict}
+        self.test_tasks = {}  # {test_id: asyncio.Task}
         
         # 同步执行相关
         self.sync_batches = {}  # {batch_id: {test_id: device_id}}
@@ -287,6 +289,7 @@ class TestManager:
         self.active_tests.clear()
         self.test_to_device.clear()
         self.test_data_cache.clear()
+        self.test_tasks.clear()
         
         # 关闭事件循环
         if self.loop and self.loop.is_running():
@@ -296,6 +299,16 @@ class TestManager:
                 pass
         
         logger.info("测试管理器已关闭")
+
+    def _start_test_task(self, test: Test) -> None:
+        """Schedule a test and track the task for graceful stop."""
+        task = asyncio.create_task(self.run_test(test))
+        self.test_tasks[test.test_id] = task
+
+        def _cleanup(_task, test_id=test.test_id):
+            self.test_tasks.pop(test_id, None)
+
+        task.add_done_callback(_cleanup)
     
     async def main_loop(self):
         """主事件循环，处理队列消息和测试执行"""
@@ -551,7 +564,7 @@ class TestManager:
         self.active_tests[test_id] = test
         
         # 异步执行测试
-        asyncio.create_task(self.run_test(test))
+        self._start_test_task(test)
         
         return {
             "status": "ok", 
@@ -816,163 +829,42 @@ class TestManager:
         Returns:
             操作结果
         """
-        # 优先使用测试ID
+        # Prefer test_id when provided.
         if test_id and test_id in self.test_to_device:
             device_id = self.test_to_device[test_id]
-        
-        if device_id and device_id in self.active_devices:
-            device = self.active_devices[device_id]
-            
-            # 发送停止命令
-            device.stop()
-            
-            # 等待命令发送完成
-            await asyncio.sleep(0.1)
-            
-            # 保存所有相关测试的进度 - 新增部分
-            tests_to_save = []
-            for tid, did in list(self.test_to_device.items()):
-                if did == device_id and tid in self.active_tests:
-                    tests_to_save.append((tid, self.active_tests[tid]))
-            
-            # 保存每个测试的信息
-            for tid, test in tests_to_save:
-                try:
-                    logger.info(f"保存中断的测试 {test.test_id} 的信息")
-                    
-                    # 创建测试目录（如果尚未创建）
-                    if not test.test_dir:
-                        test.create_test_directory()
-                    
-                    # 构建测试信息
-                    test_info = {
-                        "test_id": test.test_id,
-                        "device_id": test.device_id,
-                        "test_type": test.test_type,
-                        "port": test.port,
-                        "baudrate": test.baudrate,
-                        "name": test.name,
-                        "description": test.description,
-                        "created_at": test.created_at,
-                        "metadata": test.metadata,
-                        "steps": [],
-                        "status": "stopped"  # 标记为被中断
-                    }
-                    
-                    # 添加已完成步骤的信息
-                    completed_steps = 0
-                    for i, step in enumerate(test.steps):
-                        if step.end_time:  # 只添加已完成的步骤
-                            completed_steps += 1
-                            step_info = step.get_step_info()
-                            # 查找是否存在对应的数据文件
-                            file_name = f"{i+1}_{step.get_step_type()}.csv"
-                            
-                            # 检查文件是否存在
-                            file_path = f"{test.test_dir}/{file_name}"
-                            if os.path.exists(file_path):
-                                step_info["data_file"] = file_name
-                            
-                            test_info["steps"].append(step_info)
-                    
-                    # 添加执行摘要
-                    test_info["summary"] = {
-                        "completed_steps": completed_steps,
-                        "total_steps": len(test.steps),
-                        "completion_percentage": round(completed_steps / len(test.steps) * 100, 1) if len(test.steps) > 0 else 0
-                    }
-                    
-                    # 设置完成时间（中断时间）
-                    test.completed_at = datetime.now().isoformat()
-                    test_info["completed_at"] = test.completed_at
-                    
-                    # 保存测试信息
-                    self.data_queue.put({
-                        "type": MSG_SAVE_DATA,
-                        "file_path": f"{test.test_dir}/test_info.json",
-                        "content": json.dumps(test_info, indent=4, ensure_ascii=False),
-                        "mode": "json",
-                        "test_id": test.test_id
-                    })
-                    
-                    # 确保测试结果被记录
-                    self.test_results[test.test_id] = {
-                        "status": "stopped",
-                        "info": test_info,
-                        "test_dir": test.test_dir,
-                        "completed_at": time.time()
-                    }
-                    
-                    # 发送测试结果消息
-                    await self.data_bridge.send_test_result(
-                        test_id=test.test_id,
-                        status="stopped",
-                        info=test_info,
-                        device_id=test.device_id
-                    )
-                    
-                    logger.info(f"测试 {test.test_id} 的信息已保存（中断状态）")
-                
-                except Exception as e:
-                    logger.error(f"保存中断测试 {test.test_id} 信息失败: {e}")
-            
-            # 处理后再清理资源
-            tests_to_remove = []
-            for tid, did in list(self.test_to_device.items()):
-                if did == device_id:
-                    tests_to_remove.append(tid)
-            
-            # 从活跃测试列表中移除
-            for tid in tests_to_remove:
-                if tid in self.active_tests:
-                    del self.active_tests[tid]
-                
-                if tid in self.test_to_device:
-                    del self.test_to_device[tid]
-                
-                # 清理测试数据缓存
-                if tid in self.test_data_cache:
-                    del self.test_data_cache[tid]
-                
-                # 清理同步相关数据
-                for batch_id, batch_tests in list(self.sync_batches.items()):
-                    if tid in batch_tests:
-                        del batch_tests[tid]
-                        # 如果批次中没有测试了，清理整个批次
-                        if not batch_tests:
-                            del self.sync_batches[batch_id]
-                            if batch_id in self.sync_step_status:
-                                del self.sync_step_status[batch_id]
-                            if batch_id in self.sync_locks:
-                                del self.sync_locks[batch_id]
-            
-            # 检查设备是否不再被使用
-            if not any(did == device_id for did in self.test_to_device.values()):
-                # 断开设备连接
-                await device.disconnect()
-                
-                # 从活跃设备列表中移除
-                if device_id in self.active_devices:
-                    del self.active_devices[device_id]
-                
-                # 更新设备状态
-                self.device_status[device_id] = {
-                    "connected": False,
-                    "last_updated": time.time()
-                }
-                
-                # 发送设备状态更新
-                await self.data_bridge.send_device_status(
-                    device_id=device_id,
-                    status="disconnected"
-                )
-                
-                logger.info(f"设备 {device_id} 已断开连接并从设备池移除")
-            
-            return {"status": "ok", "msg": "stopped"}
-        
-        return {"status": "fail", "reason": "device_or_test_not_found"}
-    
+
+        if not device_id or device_id not in self.active_devices:
+            return {"status": "fail", "reason": "device_or_test_not_found"}
+
+        device = self.active_devices[device_id]
+
+        # Allow the running test task to finish and persist data.
+        device.stop()
+        await asyncio.sleep(0.1)
+
+        if test_id:
+            test_ids = [test_id]
+        else:
+            test_ids = [tid for tid, did in self.test_to_device.items() if did == device_id]
+
+        if not test_ids:
+            return {"status": "fail", "reason": "device_or_test_not_found"}
+
+        tasks_by_id = {tid: self.test_tasks.get(tid) for tid in test_ids if self.test_tasks.get(tid) is not None}
+
+        if tasks_by_id:
+            done, pending = await asyncio.wait(
+                list(tasks_by_id.values()),
+                timeout=STOP_WAIT_TIMEOUT
+            )
+
+            if pending:
+                pending_ids = [tid for tid, task in tasks_by_id.items() if task in pending]
+                logger.warning(f"Stop requested for device {device_id}, pending tests: {pending_ids}")
+                return {"status": "ok", "msg": "stop_pending", "pending_tests": pending_ids}
+
+        return {"status": "ok", "msg": "stopped"}
+
     async def run_test(self, test: Test):
         """
         运行测试并清理
@@ -1231,7 +1123,7 @@ class TestManager:
         self.active_tests[test_id] = test
         
         # 异步执行测试
-        asyncio.create_task(self.run_test(test))
+        self._start_test_task(test)
         
         return {
             "status": "ok", 
