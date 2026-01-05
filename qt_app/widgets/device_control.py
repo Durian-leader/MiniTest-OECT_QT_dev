@@ -20,6 +20,27 @@ from logger_config import get_module_logger
 logger = get_module_logger()
 #####################################################################
 
+DEFAULT_TRANSIMPEDANCE_OHMS = 100.0
+ADC_FULL_SCALE_VOLTAGE = 2.048
+
+def normalize_transimpedance(value, default=DEFAULT_TRANSIMPEDANCE_OHMS):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return default
+    if value <= 0:
+        return default
+    return value
+
+def format_transimpedance_info(value):
+    transimpedance_ohms = normalize_transimpedance(value)
+    range_ma = (ADC_FULL_SCALE_VOLTAGE / transimpedance_ohms) * 1000.0
+    return tr(
+        "device_control.transimpedance_display",
+        ohms=f"{transimpedance_ohms:g}",
+        range=f"{range_ma:.4g}"
+    )
+
 class DeviceItemDelegate(QStyledItemDelegate):
     """Custom delegate for rendering device list items"""
     
@@ -81,8 +102,15 @@ class DeviceItemDelegate(QStyledItemDelegate):
         if not device_desc:
             device_desc = tr("device_control.unknown_device")
 
-        desc_rect = QRect(rect.left() + 10, rect.top() + 25, rect.width() - 20, 20)
-        painter.drawText(desc_rect, Qt.AlignLeft | Qt.AlignVCenter, f"{tr('device_control.device_description_prefix')} {device_desc}")
+        transimpedance_text = format_transimpedance_info(
+            device.get('transimpedance_ohms', DEFAULT_TRANSIMPEDANCE_OHMS)
+        )
+        transimpedance_rect = QRect(rect.left() + 10, rect.top() + 25, rect.width() - 20, 20)
+        painter.drawText(
+            transimpedance_rect,
+            Qt.AlignLeft | Qt.AlignVCenter,
+            transimpedance_text
+        )
         
         # Si hay un test activo, mostrar información en la parte inferior
         if has_active_test:
@@ -101,9 +129,12 @@ class DeviceItemDelegate(QStyledItemDelegate):
             painter.setFont(port_font)
             painter.setPen(sec_color)
 
-            port_info = f"{tr('device_control.device_port_prefix')} {device.get('device', '')}"
             port_rect = QRect(rect.left() + 10, rect.top() + 40, rect.width() - 20, 20)
-            painter.drawText(port_rect, Qt.AlignLeft | Qt.AlignVCenter, port_info)
+            painter.drawText(
+                port_rect,
+                Qt.AlignLeft | Qt.AlignVCenter,
+                f"{tr('device_control.device_description_prefix')} {device_desc}"
+            )
 
 class DeviceControlWidget(QWidget):
     """
@@ -126,6 +157,7 @@ class DeviceControlWidget(QWidget):
         
         # Auto-naming setting
         self.auto_naming = True
+        self.default_transimpedance_ohms = DEFAULT_TRANSIMPEDANCE_OHMS
         
         # Sync workflow setting
         self.sync_workflow_enabled = False
@@ -310,7 +342,7 @@ class DeviceControlWidget(QWidget):
         self.device_number_edit.setStyleSheet("QLineEdit { border: 2px solid #ddd; border-radius: 4px; padding: 5px; background-color: white; }")
         self.device_number_label = QLabel(tr("device_control.device_number"))
         form_layout.addRow(self.device_number_label, self.device_number_edit)
-        
+
         # Add form layout to test info layout
         test_info_layout.addLayout(form_layout)
         
@@ -449,7 +481,7 @@ class DeviceControlWidget(QWidget):
         if text and self.auto_naming and self.test_name_edit.isEnabled():
             self.auto_naming = False
             self.auto_naming_check.setChecked(False)
-    
+
     def on_workflow_updated(self):
         """当工作流被更新时保存当前工作流"""
         if self.selected_port:
@@ -571,6 +603,8 @@ class DeviceControlWidget(QWidget):
                 else:
                     # 使用新查询的设备信息
                     device_for_display = device
+                if "transimpedance_ohms" not in device_for_display:
+                    device_for_display["transimpedance_ohms"] = self.default_transimpedance_ohms
                 final_devices.append(device_for_display)
             
             # Sort devices alphabetically by device_id or device port
@@ -640,6 +674,7 @@ class DeviceControlWidget(QWidget):
         info_text = f"{tr('device_control.current_device_prefix')} {device['description']}"
         if device['device_id']:
             info_text += f"<br><small>{tr('device_control.device_id_prefix')} {device['device_id']}</small>"
+        info_text += f"<br><small>{format_transimpedance_info(device.get('transimpedance_ohms', self.default_transimpedance_ohms))}</small>"
         if port in self.current_test_ids:
             info_text += f"<br><small>{tr('device_control.test_id_prefix')} {self.current_test_ids[port]}</small>"
         
@@ -784,6 +819,10 @@ class DeviceControlWidget(QWidget):
         test_description = self.test_desc_edit.text().strip()
         chip_id = self.chip_id_edit.text().strip()
         device_number = self.device_number_edit.text().strip()
+        transimpedance_ohms = normalize_transimpedance(
+            device_info.get('transimpedance_ohms'),
+            self.default_transimpedance_ohms
+        )
         
         # Prepare workflow parameters
         device_id = device_info['device_id'] or self.selected_port
@@ -797,6 +836,7 @@ class DeviceControlWidget(QWidget):
             "chip_id": chip_id,
             "device_number": device_number,
             "steps": steps,
+            "transimpedance_ohms": transimpedance_ohms,
         }
         
         try:
@@ -814,10 +854,12 @@ class DeviceControlWidget(QWidget):
                 # Create or update plot widget
                 if self.selected_port not in self.plot_widgets:
                     plot_widget = RealtimePlotWidget(self.selected_port, test_id)
+                    plot_widget.set_transimpedance_ohms(transimpedance_ohms)
                     self.plot_widgets[self.selected_port] = plot_widget
                     self.plot_layout.addWidget(plot_widget)
                 else:
                     self.plot_widgets[self.selected_port].set_test_id(test_id)
+                    self.plot_widgets[self.selected_port].set_transimpedance_ohms(transimpedance_ohms)
                 
                 # Update plot visibility
                 self.update_plot_visibility()
@@ -827,6 +869,7 @@ class DeviceControlWidget(QWidget):
                     info_text = f"{tr('device_control.current_device_prefix')} {device_info['description']}"
                     if device_info['device_id']:
                         info_text += f"<br><small>{tr('device_control.device_id_prefix')} {device_info['device_id']}</small>"
+                    info_text += f"<br><small>{format_transimpedance_info(transimpedance_ohms)}</small>"
                     info_text += f"<br><small>{tr('device_control.test_id_prefix')} {test_id}</small>"
                     info_text += f"<br><small>{tr('device_control.test_name_prefix', default='Test Name:')} {test_name}</small>"
                     self.device_info.setText(info_text)
@@ -921,6 +964,10 @@ class DeviceControlWidget(QWidget):
                 test_description = ''
                 chip_id = ''
                 device_number = ''
+            transimpedance_ohms = normalize_transimpedance(
+                device_info.get('transimpedance_ohms'),
+                self.default_transimpedance_ohms
+            )
             
             # Prepare workflow parameters with sync flag
             params = {
@@ -933,6 +980,7 @@ class DeviceControlWidget(QWidget):
                 "chip_id": chip_id,
                 "device_number": device_number,
                 "steps": steps,
+                "transimpedance_ohms": transimpedance_ohms,
                 "sync_mode": True,  # Add sync mode flag
                 "batch_id": batch_id  # Add batch ID for synchronization
             }
@@ -949,10 +997,12 @@ class DeviceControlWidget(QWidget):
                     # Create or update plot widget
                     if port not in self.plot_widgets:
                         plot_widget = RealtimePlotWidget(port, test_id)
+                        plot_widget.set_transimpedance_ohms(transimpedance_ohms)
                         self.plot_widgets[port] = plot_widget
                         self.plot_layout.addWidget(plot_widget)
                     else:
                         self.plot_widgets[port].set_test_id(test_id)
+                        self.plot_widgets[port].set_transimpedance_ohms(transimpedance_ohms)
                     
                     success_count += 1
                 else:

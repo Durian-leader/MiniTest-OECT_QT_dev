@@ -34,6 +34,6 @@ if __name__ == "__main__":
 # pyinstaller --onefile --windowed --noconfirm run_qt_for_exe.py
 # pyinstaller --onefile --windowed --icon=my_icon.ico --add-data="my_icon.ico;." run_qt_for_exe.py
 """
-pyinstaller --onefile --windowed --icon=my_icon.ico --add-data "my_icon.ico;." --add-data "locales;locales" run_qt_for_exe.py
+pyinstaller --onefile --windowed --icon=my_icon.ico --add-data "my_icon.ico;." --add-data "resources;resources" run_qt_for_exe.py
 
 """

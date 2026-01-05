@@ -169,6 +169,7 @@ class DataSaveManager:
                 content = task.get("content")
                 mode = task.get("mode", task.get("step_type", "transfer"))
                 test_id = task.get("test_id", "unknown")
+                transimpedance_ohms = task.get("transimpedance_ohms", 100.0)
                 
                 # 如果没有提供文件路径，但有必要的参数，生成一个
                 if not file_path and test_id and mode:
@@ -193,7 +194,13 @@ class DataSaveManager:
                 
                 # 保存文件
                 is_append = task.get("append", False)
-                success, size, error = self._save_file(file_path, content, mode, is_append)
+                success, size, error = self._save_file(
+                    file_path,
+                    content,
+                    mode,
+                    is_append,
+                    transimpedance_ohms=transimpedance_ohms
+                )
                 
                 # 发送结果
                 status = "ok" if success else "error"
@@ -251,7 +258,14 @@ class DataSaveManager:
         except Exception as e:
             logger.error(f"发送保存结果失败: {str(e)}")
     
-    def _save_file(self, file_path: str, content: Any, mode: str, append: bool = False) -> Tuple[bool, int, Optional[str]]:
+    def _save_file(
+        self,
+        file_path: str,
+        content: Any,
+        mode: str,
+        append: bool = False,
+        transimpedance_ohms: float = 100.0
+    ) -> Tuple[bool, int, Optional[str]]:
         """
         保存文件
         
@@ -275,7 +289,11 @@ class DataSaveManager:
                     # 追加模式，累积数据
                     with self.cache_lock:
                         # 解析新数据
-                        new_data_np = bytes_to_numpy(content, mode=mode)
+                        new_data_np = bytes_to_numpy(
+                            content,
+                            mode=mode,
+                            transimpedance_ohms=transimpedance_ohms
+                        )
                         
                         # 获取缓存数据
                         cached_data = self.test_data_cache[file_path]
@@ -297,7 +315,11 @@ class DataSaveManager:
                         )
                 else:
                     # 新文件或非追加模式
-                    transfer_data_np = bytes_to_numpy(content, mode=mode)
+                    transfer_data_np = bytes_to_numpy(
+                        content,
+                        mode=mode,
+                        transimpedance_ohms=transimpedance_ohms
+                    )
                     
                     # 写入文件
                     np.savetxt(
@@ -323,7 +345,11 @@ class DataSaveManager:
                     # 追加模式，累积数据
                     with self.cache_lock:
                         # 解析新数据
-                        new_data_np = bytes_to_numpy(content, mode=mode)
+                        new_data_np = bytes_to_numpy(
+                            content,
+                            mode=mode,
+                            transimpedance_ohms=transimpedance_ohms
+                        )
                         
                         # 获取缓存数据
                         cached_data = self.test_data_cache[file_path]
@@ -345,7 +371,11 @@ class DataSaveManager:
                         )
                 else:
                     # 新文件或非追加模式
-                    transient_data_np = bytes_to_numpy(content, mode=mode)
+                    transient_data_np = bytes_to_numpy(
+                        content,
+                        mode=mode,
+                        transimpedance_ohms=transimpedance_ohms
+                    )
                     
                     # 写入文件
                     np.savetxt(

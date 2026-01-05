@@ -10,6 +10,7 @@ import numpy as np
 
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
+from app_config import get_bias_current
 logger = get_module_logger() 
 #####################################################################
 
@@ -91,7 +92,7 @@ def decode_hex_to_bytes(hex_string):
         traceback.print_exc()
         return b''
 
-def decode_bytes_to_data(byte_data, mode='transfer'):
+def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0):
     """
     Decode bytes to data points - *** 改进output支持 ***
     
@@ -106,7 +107,14 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
     packet_size = 7 if mode == 'transient' else 5
     
     # Define bias current correction
-    bias_current = -1.2868e-6
+    bias_current = get_bias_current()
+
+    try:
+        transimpedance_ohms = float(transimpedance_ohms)
+    except (TypeError, ValueError):
+        transimpedance_ohms = 100.0
+    if transimpedance_ohms <= 0:
+        transimpedance_ohms = 100.0
     
     # Initialize result list
     result = []
@@ -142,7 +150,7 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
                     
                     # Current (3 bytes)
                     current_raw = int.from_bytes(b'\x00' + byte_data[i+4:i+7], byteorder='big')
-                    current_value = -ads_cal_voltage(current_raw) / 100.0 - bias_current
+                    current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - bias_current
                     
                     # Add data point - convert ms to seconds for time
                     result.append([ts / 1000.0, current_value])
@@ -161,7 +169,7 @@ def decode_bytes_to_data(byte_data, mode='transfer'):
 
                     # Current (3 bytes)
                     current_raw = int.from_bytes(b'\x00' + byte_data[i+2:i+5], byteorder='big')
-                    current_value = -ads_cal_voltage(current_raw) / 100.0 - bias_current
+                    current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - bias_current
 
                     # *** 数据验证：过滤异常值 ***
                     # 电压合理范围：-5V 到 +5V（根据实际应用调整）

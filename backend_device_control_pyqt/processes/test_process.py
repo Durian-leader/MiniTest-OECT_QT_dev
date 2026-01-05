@@ -13,6 +13,7 @@ import uuid
 import signal
 import sys
 import asyncio
+import re
 from typing import Dict, List, Any, Optional, Set, Tuple
 import serial.tools.list_ports
 import serial_asyncio
@@ -46,6 +47,7 @@ MSG_SAVE_DATA = "save_data"
 MSG_DEVICE_STATUS = "device_status"
 MSG_SHUTDOWN = "shutdown"
 STOP_WAIT_TIMEOUT = 3.0
+DEFAULT_TRANSIMPEDANCE_OHMS = 100.0
 
 class ProcessDataBridge:
     """进程间数据桥接器，替代原websocket桥接器"""
@@ -497,6 +499,7 @@ class TestManager:
         port = params.get("port")
         baudrate = params.get("baudrate")
         test_id = params.get("test_id")
+        transimpedance_ohms = params.get("transimpedance_ohms", 100.0)
         name = params.get("name", "自定义工作流")
         description = params.get("description", "")
         chip_id = params.get("chip_id", "")
@@ -550,7 +553,8 @@ class TestManager:
                 "chip_id": chip_id,
                 "device_number": device_number,
                 "sync_mode": sync_mode,
-                "batch_id": batch_id
+                "batch_id": batch_id,
+                "transimpedance_ohms": transimpedance_ohms
             }
         )
         
@@ -592,6 +596,7 @@ class TestManager:
         # 初始化路径跟踪，如果未提供
         if current_path is None:
             current_path = []
+        transimpedance_ohms = test.metadata.get("transimpedance_ohms", 100.0)
         
         for i, step_config in enumerate(steps):
             step_type = step_config.get("type")
@@ -611,11 +616,13 @@ class TestManager:
                 }
                 
                 # 创建转移特性测试步骤
+                step_params = dict(step_config.get("params", {}))
+                step_params["transimpedance_ohms"] = transimpedance_ohms
                 step = TransferStep(
                     device=device,
                     step_id=test_id,
                     command_id=step_config["command_id"],
-                    params=step_config["params"],
+                    params=step_params,
                     workflow_progress_info=workflow_progress_info
                 )
                 test.add_step(step)
@@ -630,11 +637,13 @@ class TestManager:
                 }
                 
                 # 创建瞬态特性测试步骤
+                step_params = dict(step_config.get("params", {}))
+                step_params["transimpedance_ohms"] = transimpedance_ohms
                 step = TransientStep(
                     device=device,
                     step_id=test_id,
                     command_id=step_config["command_id"],
-                    params=step_config["params"],
+                    params=step_params,
                     workflow_progress_info=workflow_progress_info
                 )
                 test.add_step(step)
@@ -649,11 +658,13 @@ class TestManager:
                 }
                 
                 # 创建输出特性测试步骤
+                step_params = dict(step_config.get("params", {}))
+                step_params["transimpedance_ohms"] = transimpedance_ohms
                 step = OutputStep(
                     device=device,
                     step_id=test_id,
                     command_id=step_config["command_id"],
-                    params=step_config["params"],
+                    params=step_params,
                     workflow_progress_info=workflow_progress_info
                 )
                 test.add_step(step)   
@@ -874,6 +885,7 @@ class TestManager:
         """
         test_id = test.test_id
         device_id = test.device_id
+        transimpedance_ohms = test.metadata.get("transimpedance_ohms", 100.0)
         
         # 如果是同步模式，设置同步回调
         if test.sync_mode:
@@ -913,7 +925,8 @@ class TestManager:
                     "file_path": file_path,
                     "content": content,
                     "mode": mode,
-                    "test_id": test_id
+                    "test_id": test_id,
+                    "transimpedance_ohms": transimpedance_ohms
                 })
             
             # 执行测试
@@ -1076,6 +1089,7 @@ class TestManager:
         port = params.get("port")
         baudrate = params.get("baudrate")
         test_id = params.get("test_id")
+        transimpedance_ohms = params.get("transimpedance_ohms", 100.0)
         
         # 检查必要参数
         if not all([device_id, port, baudrate, test_id]):
@@ -1104,18 +1118,23 @@ class TestManager:
             baudrate=baudrate,
             name=params.get("name", "输出特性测试"),
             description=params.get("description", ""),
-            metadata={"raw_params": params}
+            metadata={
+                "raw_params": params,
+                "transimpedance_ohms": transimpedance_ohms
+            }
         )
         
         # 初始化测试数据缓存
         self.test_data_cache[test_id] = {}
         
         # 创建输出特性测试步骤
+        step_params = dict(params.get("step_params", params))
+        step_params["transimpedance_ohms"] = transimpedance_ohms
         step = OutputStep(
             device=device,
             step_id=test_id,
             command_id=params.get("command_id", 1),
-            params=params.get("step_params", params)
+            params=step_params
         )
         test.add_step(step)
         
@@ -1366,16 +1385,23 @@ async def list_available_serial_ports():
                 "device": port.device,
                 "description": port.description,
                 "hwid": port.hwid,
-                "device_id": ""
+                "device_id": "",
+                "transimpedance_ohms": DEFAULT_TRANSIMPEDANCE_OHMS
             }
 
             try:
                 # 查询设备身份并确保连接正确关闭
                 identity = await query_device_identity_once_raw(port.device)
-                port_info["device_id"] = identity or ""
+                device_id, transimpedance_ohms = parse_identity_with_transimpedance(
+                    identity,
+                    DEFAULT_TRANSIMPEDANCE_OHMS
+                )
+                port_info["device_id"] = device_id or ""
+                port_info["transimpedance_ohms"] = transimpedance_ohms
             except Exception as e:
                 logger.error(f"识别 {port.device} 身份失败: {e}")
                 port_info["device_id"] = ""
+                port_info["transimpedance_ohms"] = DEFAULT_TRANSIMPEDANCE_OHMS
 
             return port_info
 
@@ -1454,6 +1480,32 @@ async def query_device_identity_once_raw(port: str, baudrate: int = 512000, time
                 await asyncio.sleep(0.1)
             except Exception as e:
                 logger.error(f"关闭串口失败: {e}")
+
+def parse_identity_with_transimpedance(identity: str,
+                                      default_ohms: float = DEFAULT_TRANSIMPEDANCE_OHMS
+                                      ) -> Tuple[str, float]:
+    """
+    解析身份字符串，提取设备名称和跨阻大小
+    格式示例："Test Unit G2|R=100"
+    """
+    if not identity:
+        return "", default_ohms
+
+    transimpedance_ohms = default_ohms
+    name = identity.strip()
+    match = re.search(r"(?:^|[|;,\s])R\s*=\s*([0-9]+(?:\.[0-9]+)?)", identity)
+    if match:
+        try:
+            transimpedance_ohms = float(match.group(1))
+        except (TypeError, ValueError):
+            transimpedance_ohms = default_ohms
+        if transimpedance_ohms <= 0:
+            transimpedance_ohms = default_ohms
+        name = identity[:match.start()].strip(" |;,")
+        if not name:
+            name = identity.strip()
+
+    return name, transimpedance_ohms
 
 def count_total_steps(steps):
     """

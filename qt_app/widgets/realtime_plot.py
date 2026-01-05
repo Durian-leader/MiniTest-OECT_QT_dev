@@ -26,6 +26,7 @@ class RealtimePlotWidget(QWidget):
         self.data_buffer = ""  # Buffer for hex data
         self.test_completed = False
         self.path_readable = ""
+        self.transimpedance_ohms = 100.0
         
         # 步骤跟踪
         self.current_step_index = -1
@@ -61,6 +62,15 @@ class RealtimePlotWidget(QWidget):
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_plot)
         self.update_timer.start(100)
+
+    def set_transimpedance_ohms(self, value):
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = 100.0
+        if value <= 0:
+            value = 100.0
+        self.transimpedance_ohms = value
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -576,7 +586,11 @@ class RealtimePlotWidget(QWidget):
             return
 
         # 解析新数据点
-        new_points = decode_bytes_to_data(byte_data, mode)
+        new_points = decode_bytes_to_data(
+            byte_data,
+            mode,
+            transimpedance_ohms=self.transimpedance_ohms
+        )
 
         # 添加数据点到缓冲区，带数据验证
         if new_points:
@@ -689,7 +703,11 @@ class RealtimePlotWidget(QWidget):
             return
 
         # 解析新数据点
-        new_points = decode_bytes_to_data(byte_data, mode='transfer')  # output使用transfer格式
+        new_points = decode_bytes_to_data(
+            byte_data,
+            mode='transfer',
+            transimpedance_ohms=self.transimpedance_ohms
+        )  # output使用transfer格式
 
         if new_points and curve_name in self.output_curves_data:
             # 添加数据点到对应曲线，并进行额外验证
@@ -767,7 +785,11 @@ class RealtimePlotWidget(QWidget):
         if not byte_data:
             return
 
-        new_points = decode_bytes_to_data(byte_data, mode='transfer')
+        new_points = decode_bytes_to_data(
+            byte_data,
+            mode='transfer',
+            transimpedance_ohms=self.transimpedance_ohms
+        )
 
         if new_points:
             self.total_received_points += len(new_points)

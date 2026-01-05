@@ -50,7 +50,9 @@ class TranslationManager(QObject):
         # 从 qt_app/i18n/translator.py 向上两级到项目根目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
-        self.locales_dir = os.path.join(project_root, "locales")
+        resources_locales = os.path.join(project_root, "resources", "locales")
+        legacy_locales = os.path.join(project_root, "locales")
+        self.locales_dir = resources_locales if os.path.isdir(resources_locales) else legacy_locales
 
         # 加载所有翻译文件
         self._load_translations()

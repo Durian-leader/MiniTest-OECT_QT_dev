@@ -26,6 +26,7 @@ class OutputStep(TestStep):
         """
         super().__init__(device, step_id, params, workflow_progress_info)
         self.command_id = command_id
+        self.transimpedance_ohms = params.get("transimpedance_ohms", 100.0)
         
         # 解析栅极电压列表
         gate_voltage_list = params.get("gateVoltageList", [0])
@@ -247,7 +248,11 @@ class OutputStep(TestStep):
             for vg, raw_data in self.all_scan_data.items():
                 if raw_data:
                     # 使用transfer模式解析（因为都是电压+电流格式）
-                    data_array = bytes_to_numpy(raw_data, mode='transfer')
+                    data_array = bytes_to_numpy(
+                        raw_data,
+                        mode='transfer',
+                        transimpedance_ohms=self.transimpedance_ohms
+                    )
                     if len(data_array) > 0:
                         parsed_data[vg] = data_array
             
