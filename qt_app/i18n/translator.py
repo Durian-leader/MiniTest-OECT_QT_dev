@@ -10,6 +10,7 @@
 
 import json
 import os
+import sys
 from typing import Dict, Any, Optional
 from PyQt5.QtCore import QObject, pyqtSignal, QSettings
 
@@ -50,9 +51,23 @@ class TranslationManager(QObject):
         # 从 qt_app/i18n/translator.py 向上两级到项目根目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
-        resources_locales = os.path.join(project_root, "resources", "locales")
-        legacy_locales = os.path.join(project_root, "locales")
-        self.locales_dir = resources_locales if os.path.isdir(resources_locales) else legacy_locales
+        base_dirs = []
+        if getattr(sys, "frozen", False):
+            base_dirs.append(os.path.dirname(sys.executable))
+            meipass = getattr(sys, "_MEIPASS", "")
+            if meipass:
+                base_dirs.append(meipass)
+        base_dirs.append(project_root)
+
+        self.locales_dir = ""
+        for base_dir in base_dirs:
+            candidate = os.path.join(base_dir, "resources", "locales")
+            if os.path.isdir(candidate):
+                self.locales_dir = candidate
+                break
+
+        if not self.locales_dir:
+            self.locales_dir = os.path.join(project_root, "locales")
 
         # 加载所有翻译文件
         self._load_translations()

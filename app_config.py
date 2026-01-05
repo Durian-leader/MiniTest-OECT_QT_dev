@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from typing import Any, List, Optional
 
 from logger_config import get_module_logger
@@ -13,10 +14,16 @@ CONFIG_FILENAME = "bias_current.json"
 
 def _config_paths() -> List[str]:
     project_root = os.path.dirname(os.path.abspath(__file__))
-    return [
-        os.path.join(project_root, "resources", "config", CONFIG_FILENAME),
-        os.path.join(project_root, CONFIG_FILENAME),
-    ]
+    paths = []
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        paths.append(os.path.join(exe_dir, "resources", "config", CONFIG_FILENAME))
+        meipass = getattr(sys, "_MEIPASS", "")
+        if meipass:
+            paths.append(os.path.join(meipass, "resources", "config", CONFIG_FILENAME))
+    paths.append(os.path.join(project_root, "resources", "config", CONFIG_FILENAME))
+    paths.append(os.path.join(project_root, CONFIG_FILENAME))
+    return paths
 
 
 def _parse_enabled(value: Any) -> bool:
