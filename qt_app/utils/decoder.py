@@ -10,7 +10,7 @@ import numpy as np
 
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
-from app_config import get_bias_current
+from app_config import get_bias_current, get_bias_reference_transimpedance
 logger = get_module_logger() 
 #####################################################################
 
@@ -107,7 +107,9 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0):
     packet_size = 7 if mode == 'transient' else 5
     
     # Define bias current correction
-    bias_current = get_bias_current()
+    # bias_current is calibrated at reference transimpedance, scale for other values
+    bias_reference_transimpedance = get_bias_reference_transimpedance()
+    bias_current_raw = get_bias_current()
 
     try:
         transimpedance_ohms = float(transimpedance_ohms)
@@ -115,6 +117,9 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0):
         transimpedance_ohms = 100.0
     if transimpedance_ohms <= 0:
         transimpedance_ohms = 100.0
+
+    # Scale bias current according to transimpedance ratio
+    bias_current = bias_current_raw * (bias_reference_transimpedance / transimpedance_ohms)
     
     # Initialize result list
     result = []

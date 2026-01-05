@@ -5,7 +5,7 @@ import struct
 from logger_config import get_module_logger
 logger = get_module_logger() 
 #####################################################################
-from app_config import get_bias_current
+from app_config import get_bias_current, get_bias_reference_transimpedance
 
 def ADS_CalVoltage(data):
     """将 24-bit 原始 ADC 数据转换为电压值"""
@@ -35,7 +35,11 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0):
         transimpedance_ohms = 100.0
     if transimpedance_ohms <= 0:
         transimpedance_ohms = 100.0
-    bias_current = get_bias_current()
+
+    # bias_current is calibrated at reference transimpedance, scale for other values
+    bias_reference_transimpedance = get_bias_reference_transimpedance()
+    bias_current_raw = get_bias_current()
+    bias_current = bias_current_raw * (bias_reference_transimpedance / transimpedance_ohms)
 
     if mode == 'transient':
         packet_size = 7

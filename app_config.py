@@ -9,6 +9,7 @@ logger = get_module_logger()
 
 DEFAULT_BIAS_CURRENT = -1.2868e-6
 DEFAULT_BIAS_ENABLED = True
+DEFAULT_REFERENCE_TRANSIMPEDANCE = 100.0
 CONFIG_FILENAME = "bias_current.json"
 
 
@@ -34,7 +35,8 @@ def _parse_enabled(value: Any) -> bool:
     return bool(value)
 
 
-def load_bias_current_config(path: Optional[str] = None) -> float:
+def load_bias_current_config(path: Optional[str] = None) -> tuple:
+    """Load bias current config and return (bias_current, reference_transimpedance)."""
     config_paths = [path] if path else _config_paths()
     data = None
     config_path = None
@@ -48,26 +50,44 @@ def load_bias_current_config(path: Optional[str] = None) -> float:
             continue
         except Exception as exc:
             logger.warning(f"Failed to load bias current config from {candidate}: {exc}")
-            return DEFAULT_BIAS_CURRENT
+            return DEFAULT_BIAS_CURRENT, DEFAULT_REFERENCE_TRANSIMPEDANCE
 
     if data is None:
-        return DEFAULT_BIAS_CURRENT
+        return DEFAULT_BIAS_CURRENT, DEFAULT_REFERENCE_TRANSIMPEDANCE
 
     enabled = _parse_enabled(data.get("enabled", DEFAULT_BIAS_ENABLED))
     if not enabled:
-        return 0.0
+        return 0.0, DEFAULT_REFERENCE_TRANSIMPEDANCE
 
+    # Parse bias current value
     value = data.get("value", DEFAULT_BIAS_CURRENT)
     try:
-        return float(value)
+        bias_current = float(value)
     except (TypeError, ValueError):
         if config_path:
             logger.warning(f"Invalid bias current value in {config_path}, using default.")
-        return DEFAULT_BIAS_CURRENT
+        bias_current = DEFAULT_BIAS_CURRENT
+
+    # Parse reference transimpedance
+    ref_trans = data.get("reference_transimpedance", DEFAULT_REFERENCE_TRANSIMPEDANCE)
+    try:
+        reference_transimpedance = float(ref_trans)
+        if reference_transimpedance <= 0:
+            reference_transimpedance = DEFAULT_REFERENCE_TRANSIMPEDANCE
+    except (TypeError, ValueError):
+        if config_path:
+            logger.warning(f"Invalid reference_transimpedance in {config_path}, using default.")
+        reference_transimpedance = DEFAULT_REFERENCE_TRANSIMPEDANCE
+
+    return bias_current, reference_transimpedance
 
 
-_BIAS_CURRENT = load_bias_current_config()
+_BIAS_CURRENT, _BIAS_REFERENCE_TRANSIMPEDANCE = load_bias_current_config()
 
 
 def get_bias_current() -> float:
     return _BIAS_CURRENT
+
+
+def get_bias_reference_transimpedance() -> float:
+    return _BIAS_REFERENCE_TRANSIMPEDANCE
