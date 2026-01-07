@@ -16,7 +16,7 @@ def ADS_CalVoltage(data):
         voltage = (data / 8388607.0) * 2.048
     return voltage
 
-def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0):
+def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, transient_packet_size: int = 7):
     """Convert byte data to a numpy array."""
     end_sequences = [
         b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',
@@ -42,7 +42,13 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0):
     bias_current = bias_current_raw * (bias_reference_transimpedance / transimpedance_ohms)
 
     if mode == 'transient':
-        packet_size = 7
+        try:
+            transient_packet_size = int(transient_packet_size)
+        except (TypeError, ValueError):
+            transient_packet_size = 7
+        if transient_packet_size not in (7, 9):
+            transient_packet_size = 7
+        packet_size = transient_packet_size
     else:
         packet_size = 5
 
@@ -53,10 +59,12 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0):
         byte_data = byte_data[:complete_bytes]
 
     if len(byte_data) == 0:
-        return np.zeros((0, 2))
+        num_columns = 3 if mode == 'transient' and packet_size == 9 else 2
+        return np.zeros((0, num_columns))
 
     num_entries = len(byte_data) // packet_size
-    result = np.zeros((num_entries, 2))
+    num_columns = 3 if mode == 'transient' and packet_size == 9 else 2
+    result = np.zeros((num_entries, num_columns))
 
     for i in range(num_entries):
         offset = i * packet_size
@@ -65,11 +73,20 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0):
             ts_bytes = byte_data[offset:offset+4]
             ts_bytes_swapped = bytes(reversed(ts_bytes))
             timestamp = struct.unpack('>i', ts_bytes_swapped)[0]
-            current_bytes = byte_data[offset+4:offset+7]
+            if packet_size == 9:
+                vg_bytes = byte_data[offset+4:offset+6]
+                vg_bytes_swapped = bytes(reversed(vg_bytes))
+                gate_voltage = struct.unpack('>h', vg_bytes_swapped)[0] / 1000.0
+                current_bytes = byte_data[offset+6:offset+9]
+            else:
+                gate_voltage = None
+                current_bytes = byte_data[offset+4:offset+7]
             current_raw = int.from_bytes(b'\x00' + current_bytes, byteorder='big')
             current_value = - ADS_CalVoltage(current_raw) / transimpedance_ohms
             result[i, 0] = timestamp / 1000
             result[i, 1] = current_value - bias_current
+            if gate_voltage is not None and num_columns > 2:
+                result[i, 2] = gate_voltage
         else:
             voltage_bytes = byte_data[offset:offset+2]
             voltage_bytes_swapped = bytes(reversed(voltage_bytes))

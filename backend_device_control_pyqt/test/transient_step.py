@@ -20,6 +20,14 @@ class TransientStep(TestStep):
         """
         super().__init__(device, step_id, params, workflow_progress_info)
         self.command_id = command_id
+        packet_size = params.get("transient_packet_size", 7)
+        try:
+            packet_size = int(packet_size)
+        except (TypeError, ValueError):
+            packet_size = 7
+        if packet_size not in (7, 9):
+            packet_size = 7
+        self.packet_size = packet_size
         
     def get_step_type(self) -> str:
         return "transient"
@@ -28,7 +36,7 @@ class TransientStep(TestStep):
         return "transient"
         
     def get_packet_size(self) -> int:
-        return 7  # Transient data uses 7-byte packets
+        return self.packet_size  # Transient data uses 7-byte or 9-byte packets
         
     def get_end_sequence(self) -> str:
         return "FEFEFEFEFEFEFEFE"

@@ -135,7 +135,10 @@ class Test:
                     file_name = f"{i+1}_{step.get_step_type()}.csv"
                         
                 # 保存文件
-                save_file_async_fn(f"{self.test_dir}/{file_name}", data, step.get_data_mode())
+                save_kwargs = {}
+                if step.get_step_type() == "transient":
+                    save_kwargs["transient_packet_size"] = step.get_packet_size()
+                save_file_async_fn(f"{self.test_dir}/{file_name}", data, step.get_data_mode(), **save_kwargs)
                     
                 # 添加步骤信息
                 step_info = step.get_step_info()

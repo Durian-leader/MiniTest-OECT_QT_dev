@@ -500,6 +500,13 @@ class TestManager:
         baudrate = params.get("baudrate")
         test_id = params.get("test_id")
         transimpedance_ohms = params.get("transimpedance_ohms", 100.0)
+        transient_packet_size = params.get("transient_packet_size", 7)
+        try:
+            transient_packet_size = int(transient_packet_size)
+        except (TypeError, ValueError):
+            transient_packet_size = 7
+        if transient_packet_size not in (7, 9):
+            transient_packet_size = 7
         name = params.get("name", "自定义工作流")
         description = params.get("description", "")
         chip_id = params.get("chip_id", "")
@@ -554,7 +561,8 @@ class TestManager:
                 "device_number": device_number,
                 "sync_mode": sync_mode,
                 "batch_id": batch_id,
-                "transimpedance_ohms": transimpedance_ohms
+                "transimpedance_ohms": transimpedance_ohms,
+                "transient_packet_size": transient_packet_size
             }
         )
         
@@ -597,6 +605,13 @@ class TestManager:
         if current_path is None:
             current_path = []
         transimpedance_ohms = test.metadata.get("transimpedance_ohms", 100.0)
+        transient_packet_size = test.metadata.get("transient_packet_size", 7)
+        try:
+            transient_packet_size = int(transient_packet_size)
+        except (TypeError, ValueError):
+            transient_packet_size = 7
+        if transient_packet_size not in (7, 9):
+            transient_packet_size = 7
         
         for i, step_config in enumerate(steps):
             step_type = step_config.get("type")
@@ -639,6 +654,7 @@ class TestManager:
                 # 创建瞬态特性测试步骤
                 step_params = dict(step_config.get("params", {}))
                 step_params["transimpedance_ohms"] = transimpedance_ohms
+                step_params["transient_packet_size"] = transient_packet_size
                 step = TransientStep(
                     device=device,
                     step_id=test_id,
@@ -918,16 +934,21 @@ class TestManager:
 
             
             # 保存文件的回调函数 - 维持原有接口
-            def save_file_callback(file_path, content, mode):
+            def save_file_callback(file_path, content, mode, **kwargs):
                 # 发送到数据传输进程，由其转发给保存进程
-                self.data_queue.put({
+                message = {
                     "type": MSG_SAVE_DATA,
                     "file_path": file_path,
                     "content": content,
                     "mode": mode,
                     "test_id": test_id,
                     "transimpedance_ohms": transimpedance_ohms
-                })
+                }
+                if mode == "transient":
+                    transient_packet_size = kwargs.get("transient_packet_size")
+                    if transient_packet_size:
+                        message["transient_packet_size"] = transient_packet_size
+                self.data_queue.put(message)
             
             # 执行测试
             test_info = await test.execute(save_file_callback)
@@ -1313,6 +1334,8 @@ def initialize_test_step_classes(data_bridge):
             'step_type': step_type,
             'device_id': dev_id
         }
+        if step_type == "transient":
+            workflow_info["transient_packet_size"] = self.get_packet_size()
         
         if self.workflow_progress_info:
             workflow_path = self.workflow_progress_info.get("workflow_path", [])
@@ -1386,22 +1409,31 @@ async def list_available_serial_ports():
                 "description": port.description,
                 "hwid": port.hwid,
                 "device_id": "",
-                "transimpedance_ohms": DEFAULT_TRANSIMPEDANCE_OHMS
+                "transimpedance_ohms": DEFAULT_TRANSIMPEDANCE_OHMS,
+                "protocol_version": None,
+                "supports_transient_vg": False,
+                "transient_packet_size": 7
             }
 
             try:
                 # 查询设备身份并确保连接正确关闭
                 identity = await query_device_identity_once_raw(port.device)
-                device_id, transimpedance_ohms = parse_identity_with_transimpedance(
+                device_id, transimpedance_ohms, protocol_version = parse_identity_with_transimpedance(
                     identity,
                     DEFAULT_TRANSIMPEDANCE_OHMS
                 )
                 port_info["device_id"] = device_id or ""
                 port_info["transimpedance_ohms"] = transimpedance_ohms
+                port_info["protocol_version"] = protocol_version
+                port_info["supports_transient_vg"] = bool(protocol_version is not None and protocol_version >= 2.0)
+                port_info["transient_packet_size"] = 9 if port_info["supports_transient_vg"] else 7
             except Exception as e:
                 logger.error(f"识别 {port.device} 身份失败: {e}")
                 port_info["device_id"] = ""
                 port_info["transimpedance_ohms"] = DEFAULT_TRANSIMPEDANCE_OHMS
+                port_info["protocol_version"] = None
+                port_info["supports_transient_vg"] = False
+                port_info["transient_packet_size"] = 7
 
             return port_info
 
@@ -1483,17 +1515,24 @@ async def query_device_identity_once_raw(port: str, baudrate: int = 512000, time
 
 def parse_identity_with_transimpedance(identity: str,
                                       default_ohms: float = DEFAULT_TRANSIMPEDANCE_OHMS
-                                      ) -> Tuple[str, float]:
+                                      ) -> Tuple[str, float, Optional[float]]:
     """
     解析身份字符串，提取设备名称和跨阻大小
     格式示例："Test Unit G2|R=100"
     """
     if not identity:
-        return "", default_ohms
+        return "", default_ohms, None
 
     transimpedance_ohms = default_ohms
     name = identity.strip()
-    match = re.search(r"(?:^|[|;,\s])R\s*=\s*([0-9]+(?:\.[0-9]+)?)", identity)
+    protocol_version = None
+    match = re.search(r"(?:^|[|;,\s])R\s*=\s*([0-9]+(?:\.[0-9]+)?)", identity, flags=re.IGNORECASE)
+    match_pv = re.search(r"(?:^|[|;,\s])PV\s*=\s*([0-9]+(?:\.[0-9]+)?)", identity, flags=re.IGNORECASE)
+    if match_pv:
+        try:
+            protocol_version = float(match_pv.group(1))
+        except (TypeError, ValueError):
+            protocol_version = None
     if match:
         try:
             transimpedance_ohms = float(match.group(1))
@@ -1501,11 +1540,17 @@ def parse_identity_with_transimpedance(identity: str,
             transimpedance_ohms = default_ohms
         if transimpedance_ohms <= 0:
             transimpedance_ohms = default_ohms
-        name = identity[:match.start()].strip(" |;,")
+    cut_positions = []
+    if match:
+        cut_positions.append(match.start())
+    if match_pv:
+        cut_positions.append(match_pv.start())
+    if cut_positions:
+        name = identity[:min(cut_positions)].strip(" |;,")
         if not name:
             name = identity.strip()
 
-    return name, transimpedance_ohms
+    return name, transimpedance_ohms, protocol_version
 
 def count_total_steps(steps):
     """

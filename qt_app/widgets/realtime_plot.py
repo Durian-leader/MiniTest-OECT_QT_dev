@@ -25,6 +25,7 @@ class RealtimePlotWidget(QWidget):
         self.current_step_type = "transfer"  # Default step type
         self.data_buffer = ""  # Buffer for hex data
         self.test_completed = False
+        self.transient_packet_size = None
         self.path_readable = ""
         self.transimpedance_ohms = 100.0
         
@@ -311,6 +312,7 @@ class RealtimePlotWidget(QWidget):
         """Set the test ID and reset the plot"""
         self.test_id = test_id
         self.test_completed = False
+        self.transient_packet_size = None
         self.data_buffer = ""
         
         # 重置步骤跟踪
@@ -503,6 +505,8 @@ class RealtimePlotWidget(QWidget):
                 workflow_info = message.get("workflow_info", {})
                 step_index = workflow_info.get("step_index", -1)
                 path_readable = workflow_info.get("path_readable", "")
+                if step_type == "transient":
+                    self.transient_packet_size = workflow_info.get("transient_packet_size")
                 
                 # 构造唯一的步骤ID
                 step_id = f"{step_index}-{step_type}-{path_readable}"
@@ -589,7 +593,8 @@ class RealtimePlotWidget(QWidget):
         new_points = decode_bytes_to_data(
             byte_data,
             mode,
-            transimpedance_ohms=self.transimpedance_ohms
+            transimpedance_ohms=self.transimpedance_ohms,
+            transient_packet_size=self.transient_packet_size if mode == 'transient' else None
         )
 
         # 添加数据点到缓冲区，带数据验证
@@ -897,6 +902,7 @@ class RealtimePlotWidget(QWidget):
         """开始新的测试"""
         self.test_id = test_id
         self.test_completed = False
+        self.transient_packet_size = None
         
         # 重置步骤跟踪
         self.current_step_index = -1

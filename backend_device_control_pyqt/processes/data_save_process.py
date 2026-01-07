@@ -170,6 +170,7 @@ class DataSaveManager:
                 mode = task.get("mode", task.get("step_type", "transfer"))
                 test_id = task.get("test_id", "unknown")
                 transimpedance_ohms = task.get("transimpedance_ohms", 100.0)
+                transient_packet_size = task.get("transient_packet_size", 7)
                 
                 # 如果没有提供文件路径，但有必要的参数，生成一个
                 if not file_path and test_id and mode:
@@ -199,7 +200,8 @@ class DataSaveManager:
                     content,
                     mode,
                     is_append,
-                    transimpedance_ohms=transimpedance_ohms
+                    transimpedance_ohms=transimpedance_ohms,
+                    transient_packet_size=transient_packet_size
                 )
                 
                 # 发送结果
@@ -264,7 +266,8 @@ class DataSaveManager:
         content: Any,
         mode: str,
         append: bool = False,
-        transimpedance_ohms: float = 100.0
+        transimpedance_ohms: float = 100.0,
+        transient_packet_size: int = 7
     ) -> Tuple[bool, int, Optional[str]]:
         """
         保存文件
@@ -292,7 +295,8 @@ class DataSaveManager:
                         new_data_np = bytes_to_numpy(
                             content,
                             mode=mode,
-                            transimpedance_ohms=transimpedance_ohms
+                            transimpedance_ohms=transimpedance_ohms,
+                            transient_packet_size=transient_packet_size
                         )
                         
                         # 获取缓存数据
@@ -340,6 +344,18 @@ class DataSaveManager:
                 return True, os.path.getsize(file_path), None
                 
             elif mode == "transient":
+                try:
+                    transient_packet_size = int(transient_packet_size)
+                except (TypeError, ValueError):
+                    transient_packet_size = 7
+                if transient_packet_size not in (7, 9):
+                    transient_packet_size = 7
+                if transient_packet_size == 9:
+                    header = "Time,Id,Vg"
+                    fmt = ['%.3f', '%g', '%.3f']
+                else:
+                    header = "Time,Id"
+                    fmt = ['%.3f', '%g']
                 # 瞬态特性，CSV格式，保存Time和Id
                 if append and file_path in self.test_data_cache:
                     # 追加模式，累积数据
@@ -365,16 +381,17 @@ class DataSaveManager:
                             file_path, 
                             combined_data, 
                             delimiter=',', 
-                            header='Time,Id', 
+                            header=header, 
                             comments='',
-                            fmt=['%.3f', '%g']  # Time保留3位小数，Id使用通用格式
+                            fmt=fmt
                         )
                 else:
                     # 新文件或非追加模式
                     transient_data_np = bytes_to_numpy(
                         content,
                         mode=mode,
-                        transimpedance_ohms=transimpedance_ohms
+                        transimpedance_ohms=transimpedance_ohms,
+                        transient_packet_size=transient_packet_size
                     )
                     
                     # 写入文件
@@ -382,9 +399,9 @@ class DataSaveManager:
                         file_path, 
                         transient_data_np, 
                         delimiter=',', 
-                        header='Time,Id', 
+                        header=header, 
                         comments='',
-                        fmt=['%.3f', '%g']  # Time保留3位小数，Id使用通用格式
+                        fmt=fmt
                     )
                     
                     # 如果是追加模式，存入缓存

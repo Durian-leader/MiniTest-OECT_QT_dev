@@ -837,6 +837,7 @@ class DeviceControlWidget(QWidget):
             "device_number": device_number,
             "steps": steps,
             "transimpedance_ohms": transimpedance_ohms,
+            "transient_packet_size": device_info.get("transient_packet_size", 7),
         }
         
         try:
@@ -981,6 +982,7 @@ class DeviceControlWidget(QWidget):
                 "device_number": device_number,
                 "steps": steps,
                 "transimpedance_ohms": transimpedance_ohms,
+                "transient_packet_size": device_info.get("transient_packet_size", 7),
                 "sync_mode": True,  # Add sync mode flag
                 "batch_id": batch_id  # Add batch ID for synchronization
             }

@@ -92,7 +92,7 @@ def decode_hex_to_bytes(hex_string):
         traceback.print_exc()
         return b''
 
-def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0):
+def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, transient_packet_size: int = None):
     """
     Decode bytes to data points - *** 改进output支持 ***
     
@@ -103,8 +103,28 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0):
     Returns:
         list: List of [x, y] data points
     """
+    if transient_packet_size is not None:
+        try:
+            transient_packet_size = int(transient_packet_size)
+        except (TypeError, ValueError):
+            transient_packet_size = None
+
     # Define packet size based on mode
-    packet_size = 7 if mode == 'transient' else 5
+    if mode == 'transient':
+        if transient_packet_size in (7, 9):
+            packet_size = transient_packet_size
+        else:
+            data_len = len(byte_data) if byte_data else 0
+            if data_len and data_len % 9 == 0 and data_len % 7 != 0:
+                packet_size = 9
+            elif data_len and data_len % 7 == 0 and data_len % 9 != 0:
+                packet_size = 7
+            elif data_len and data_len % 9 == 0:
+                packet_size = 9
+            else:
+                packet_size = 7
+    else:
+        packet_size = 5
     
     # Define bias current correction
     # bias_current is calibrated at reference transimpedance, scale for other values
@@ -152,11 +172,17 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0):
                     # Process transient data
                     # Time stamp (4 bytes, little endian)
                     ts = int.from_bytes(byte_data[i:i+4], byteorder='little', signed=False)
-                    
+
+                    if packet_size == 9:
+                        current_start = i + 6
+                        current_end = i + 9
+                    else:
+                        current_start = i + 4
+                        current_end = i + 7
                     # Current (3 bytes)
-                    current_raw = int.from_bytes(b'\x00' + byte_data[i+4:i+7], byteorder='big')
+                    current_raw = int.from_bytes(b'\x00' + byte_data[current_start:current_end], byteorder='big')
                     current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - bias_current
-                    
+
                     # Add data point - convert ms to seconds for time
                     result.append([ts / 1000.0, current_value])
                     
