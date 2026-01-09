@@ -202,10 +202,9 @@ class DataTransmissionManager:
             logger.warning("无效的测试数据消息: 缺少test_id或data")
             return
         
-        # 确保消息中的数据是字符串形式
-        if isinstance(data, bytes) or isinstance(data, bytearray):
-            # 将二进制数据转换为十六进制字符串
-            message["data"] = data.hex().upper()
+        # 确保消息中的数据类型稳定
+        if isinstance(data, bytearray):
+            message["data"] = bytes(data)
         
         # 转发实时数据到Qt界面
         self._forward_to_qt(message)

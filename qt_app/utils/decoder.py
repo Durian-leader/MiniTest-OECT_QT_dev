@@ -57,6 +57,23 @@ def remove_end_sequences(hex_string):
     
     return cleaned_hex
 
+def remove_end_sequences_bytes(data: bytes) -> bytes:
+    """
+    Remove end sequence markers from raw bytes.
+    """
+    end_sequences = [
+        b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF',
+        b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',
+        b'\xCD\xAB\xEF\xCD\xAB\xEF\xCD\xAB',
+    ]
+    cleaned = data
+    for seq in end_sequences:
+        if cleaned.endswith(seq):
+            logger.debug(f"检测到结束标识符: {seq.hex().upper()}")
+            cleaned = cleaned[:-len(seq)]
+            break
+    return cleaned
+
 def decode_hex_to_bytes(hex_string):
     """
     Convert hex string to bytes
@@ -69,8 +86,8 @@ def decode_hex_to_bytes(hex_string):
     """
     try:
         # Check if we got a string or bytes
-        if isinstance(hex_string, bytes):
-            return hex_string
+        if isinstance(hex_string, (bytes, bytearray)):
+            return remove_end_sequences_bytes(bytes(hex_string))
             
         # Remove end sequences BEFORE converting to bytes
         cleaned_hex = remove_end_sequences(hex_string)

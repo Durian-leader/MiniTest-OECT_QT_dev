@@ -93,11 +93,13 @@ class OutputStep(TestStep):
                 self.send_enhanced_data(hex_data, dev_id, self.current_gate_voltage)
             self.pending_data_buffer.clear()
     
-    def send_enhanced_data(self, hex_data: str, dev_id: str, gate_voltage: int):
+    def send_enhanced_data(self, hex_data, dev_id: str, gate_voltage: int):
         """
         *** 新增：发送增强数据的统一方法 ***
         """
         try:
+            if isinstance(hex_data, (bytes, bytearray)):
+                hex_data = bytes(hex_data).hex().upper()
             if gate_voltage is None:
                 # 如果栅极电压还没设置，缓存数据
                 logger.debug(f"栅极电压未设置，缓存数据: {len(hex_data)} 字符")

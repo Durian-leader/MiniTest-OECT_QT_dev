@@ -300,7 +300,7 @@ class AsyncSerialDevice:
         end_sequences: Dict[str, str],
         timeout: Optional[float] = None,
         progress_callback: Optional[Callable[[int, str], None]] = None,
-        data_callback: Optional[Callable[[str, str], None]] = None,
+        data_callback: Optional[Callable[[Union[str, bytes], str], None]] = None,
         packet_size: Optional[int] = None
     ) -> Tuple[Union[str, None], str]:
         """
@@ -311,7 +311,7 @@ class AsyncSerialDevice:
             end_sequences: 结束序列字典，键为序列名称，值为十六进制字符串
             timeout: 总超时时间(秒)，None表示无超时
             progress_callback: 进度回调函数，参数为(已接收字节数, 设备ID)
-            data_callback: 数据回调函数，参数为(接收到的数据十六进制字符串, 设备ID)
+            data_callback: 数据回调函数，参数为(接收到的数据(字节或十六进制字符串), 设备ID)
             packet_size: 数据包长度（字节数），如果指定，则按固定长度切分数据包
             
         Returns:
@@ -397,7 +397,7 @@ class AsyncSerialDevice:
                                 while len(data_buffer) >= packet_size:
                                     packet = data_buffer[:packet_size]
                                     data_buffer = data_buffer[packet_size:]
-                                    data_callback(self.bytes_to_hex_str(packet), self.device_id)
+                                    data_callback(bytes(packet), self.device_id)
                             else:
                                 # 如果没有指定包大小，按原方式处理
                                 data_callback(new_data, self.device_id)

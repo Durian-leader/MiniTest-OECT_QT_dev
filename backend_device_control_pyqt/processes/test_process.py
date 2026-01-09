@@ -1234,6 +1234,8 @@ def initialize_test_step_classes(data_bridge):
                 
             # 合并同一步骤类型的数据
             hex_chunks = []
+            byte_chunks = []
+            mixed_types = False
             first_info = None
             latest_info = None
             
@@ -1242,32 +1244,45 @@ def initialize_test_step_classes(data_bridge):
                 hex_data = item['hex_data']
                 
                 if isinstance(hex_data, str):
+                    if byte_chunks:
+                        mixed_types = True
                     if " " in hex_data:
                         hex_chunks.append(hex_data.replace(" ", ""))
                     else:
                         hex_chunks.append(hex_data)
                 elif isinstance(hex_data, (bytes, bytearray)):
-                    hex_chunks.append(hex_data.hex().upper())
+                    if hex_chunks:
+                        mixed_types = True
+                    byte_chunks.append(bytes(hex_data))
                 
                 if first_info is None:
                     first_info = item['workflow_info']
                 latest_info = item['workflow_info']
 
-            combined_hex = "".join(hex_chunks)
+            combined_data = None
+            if mixed_types and hex_chunks:
+                # 混合类型时回退到hex字符串，保证兼容性
+                for chunk in byte_chunks:
+                    hex_chunks.append(chunk.hex().upper())
+                combined_data = "".join(hex_chunks)
+            elif hex_chunks:
+                combined_data = "".join(hex_chunks)
+            elif byte_chunks:
+                combined_data = b"".join(byte_chunks)
             
             # 发送合并数据 - 使用第一个数据包的工作流信息确保步骤正确性
-            if combined_hex and first_info:
+            if combined_data is not None and combined_data != b"" and combined_data != "" and first_info:
                 try:
                     asyncio.create_task(
                         data_bridge.send_data(
                             test_id=test_id,
-                            data=combined_hex,
+                            data=combined_data,
                             step_type=step_type,  # 使用明确的步骤类型
                             device_id=first_info.get('device_id', ''),
                             workflow_info=first_info  # 使用第一个数据包的信息
                         )
                     )
-                    logger.debug(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_hex)}")
+                    logger.debug(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_data)}")
                 except RuntimeError:
                     # 如果没有事件循环，直接发送
                     pass
