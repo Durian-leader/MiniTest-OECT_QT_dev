@@ -80,7 +80,8 @@ class ProcessDataBridge:
                 message["device_id"] = identifier
                 
             # 放入队列
-            self.data_queue.put(message)
+            # put 可能会阻塞（跨进程队列需要pickle），放到线程里避免阻塞事件循环
+            await asyncio.to_thread(self.data_queue.put, message)
             logger.debug(f"消息已发送到数据队列: type={message.get('type')}, id={identifier}")
             
         except Exception as e:
