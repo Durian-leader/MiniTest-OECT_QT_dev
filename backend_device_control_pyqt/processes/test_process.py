@@ -940,7 +940,7 @@ class TestManager:
         except asyncio.TimeoutError:
             return {"status": "fail", "reason": "timeout"}
         except Exception as e:
-            logger.error(f\"校零失败: {e}\")
+            logger.error(f"校零失败: {e}")
             return {"status": "fail", "reason": str(e)}
 
     async def run_test(self, test: Test):
