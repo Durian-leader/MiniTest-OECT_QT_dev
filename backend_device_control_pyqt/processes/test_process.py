@@ -46,6 +46,7 @@ MSG_TEST_ERROR = "test_error"
 MSG_SAVE_DATA = "save_data"
 MSG_DEVICE_STATUS = "device_status"
 MSG_SHUTDOWN = "shutdown"
+MSG_CALIBRATE = "calibrate"
 STOP_WAIT_TIMEOUT = 3.0
 DEFAULT_TRANSIMPEDANCE_OHMS = 100.0
 
@@ -421,6 +422,16 @@ class TestManager:
             if request_id:
                 status["request_id"] = request_id
                 self.qt_result_queue.put(status)
+        
+        elif message_type == MSG_CALIBRATE:
+            port = message.get("port")
+            device_id = message.get("device_id")
+            baudrate = message.get("baudrate", 512000)
+            request_id = message.get("request_id")
+            result = await self.calibrate_device(port, baudrate, device_id)
+            if request_id:
+                result["request_id"] = request_id
+                self.qt_result_queue.put(result)
     
     async def get_or_create_device(self, device_id: str, port: str, baudrate: int) -> Tuple[bool, Optional[AsyncSerialDevice]]:
         """
@@ -897,6 +908,40 @@ class TestManager:
                 return {"status": "ok", "msg": "stop_pending", "pending_tests": pending_ids}
 
         return {"status": "ok", "msg": "stopped"}
+
+    async def calibrate_device(self, port: str, baudrate: int, device_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        发送校零命令 (0x06) 并等待基线返回
+        """
+        if not port:
+            return {"status": "fail", "reason": "no_port"}
+
+        if device_id:
+            for tid, did in self.test_to_device.items():
+                if did == device_id:
+                    return {"status": "fail", "reason": "device_busy"}
+
+        dev_key = device_id or port
+        ok, device = await self.get_or_create_device(dev_key, port, baudrate)
+        if not ok or device is None:
+            return {"status": "fail", "reason": "connect_failed"}
+
+        if device.is_busy:
+            return {"status": "fail", "reason": "device_busy"}
+
+        try:
+            async with device._lock:
+                frame = bytes.fromhex("FF0600FE")
+                device.writer.write(frame)
+                await device.writer.drain()
+                raw = await asyncio.wait_for(device.reader.readexactly(4), timeout=12.0)
+                baseline = int.from_bytes(raw, byteorder="little", signed=True)
+                return {"status": "ok", "baseline": baseline}
+        except asyncio.TimeoutError:
+            return {"status": "fail", "reason": "timeout"}
+        except Exception as e:
+            logger.error(f\"校零失败: {e}\")
+            return {"status": "fail", "reason": str(e)}
 
     async def run_test(self, test: Test):
         """

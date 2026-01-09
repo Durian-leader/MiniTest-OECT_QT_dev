@@ -29,6 +29,7 @@ MSG_TEST_ERROR = "test_error"
 MSG_SAVE_DATA = "save_data"
 MSG_DEVICE_STATUS = "device_status"
 MSG_SHUTDOWN = "shutdown"
+MSG_CALIBRATE = "calibrate"
 
 # 进程信号常量
 SIGNAL_READY = "ready"
@@ -431,7 +432,32 @@ class MedicalTestBackend:
                     except:
                         pass
             
-            return result
+        return result
+
+    def calibrate_device(self, device_id: str, port: str, baudrate: int = 512000) -> Dict[str, Any]:
+        """对单个设备发起校零命令"""
+        if not self.is_running:
+            return {"status": "fail", "reason": "Backend not running"}
+
+        request_id = str(uuid.uuid4())
+        self.qt_to_test_queue.put({
+            "type": MSG_CALIBRATE,
+            "device_id": device_id,
+            "port": port,
+            "baudrate": baudrate,
+            "request_id": request_id
+        })
+
+        start_time = time.time()
+        timeout = 15
+        while time.time() - start_time < timeout:
+            try:
+                response = self.test_to_qt_queue.get(block=True, timeout=0.5)
+                if response.get("request_id") == request_id:
+                    return response
+            except (mp.queues.Empty, ConnectionError, BrokenPipeError, EOFError):
+                pass
+        return {"status": "fail", "reason": "calibration_timeout"}
             
         except Exception as e:
             logger.error(f"获取测试数据失败: {str(e)}")

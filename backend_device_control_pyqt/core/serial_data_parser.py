@@ -36,10 +36,7 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, trans
     if transimpedance_ohms <= 0:
         transimpedance_ohms = 100.0
 
-    # bias_current is calibrated at reference transimpedance, scale for other values
-    bias_reference_transimpedance = get_bias_reference_transimpedance()
-    bias_current_raw = get_bias_current()
-    bias_current = bias_current_raw * (bias_reference_transimpedance / transimpedance_ohms)
+    bias_current = 0.0
 
     if mode == 'transient':
         try:

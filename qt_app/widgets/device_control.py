@@ -4,7 +4,7 @@ import uuid
 import time
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QListWidget, QListWidgetItem, QSplitter, QMessageBox,
-                            QFileDialog, QFrame, QGroupBox,
+                            QFileDialog, QFrame, QGroupBox, QMenu,
                             QLineEdit, QFormLayout, QCheckBox, QStyledItemDelegate, QStyle)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize, QRect
 from PyQt5.QtGui import QIcon, QColor, QBrush, QFont
@@ -282,11 +282,19 @@ class DeviceControlWidget(QWidget):
         self.device_list.setItemDelegate(DeviceItemDelegate())
         self.device_list.setSpacing(5)  # Add spacing between items
         self.device_list.currentItemChanged.connect(self.on_device_selected)
+        self.device_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.device_list.customContextMenuRequested.connect(self.show_device_context_menu)
         left_layout.addWidget(self.device_list)
 
+        btn_row = QHBoxLayout()
         self.refresh_btn = QPushButton(tr("device_control.refresh_button"))
         self.refresh_btn.clicked.connect(self.refresh_devices)
-        left_layout.addWidget(self.refresh_btn)
+        btn_row.addWidget(self.refresh_btn)
+        self.calibrate_all_btn = QPushButton("Calibrate All")
+        self.calibrate_all_btn.clicked.connect(self.calibrate_all_devices)
+        btn_row.addWidget(self.calibrate_all_btn)
+        btn_row.addStretch()
+        left_layout.addLayout(btn_row)
         
         # Middle panel - Workflow configuration
         middle_panel = QWidget()
@@ -649,10 +657,63 @@ class DeviceControlWidget(QWidget):
         
         except Exception as e:
             QMessageBox.warning(self, "Error", f"获取设备列表失败: {str(e)}")
+
+    def calibrate_all_devices(self):
+        """对所有设备发送校零命令"""
+        results = []
+        for i in range(self.device_list.count()):
+            item = self.device_list.item(i)
+            if not item:
+                continue
+            device_data = item.data(Qt.UserRole + 1) or {}
+            res = self.calibrate_single_device(device_data, show_message=False)
+            results.append((device_data.get("device_id") or device_data.get("device"), res))
+
+        success = [r for r in results if r[1] and r[1].get("status") == "ok"]
+        failed = [r for r in results if not r[1] or r[1].get("status") != "ok"]
+
+        msg = f"校零完成: {len(success)}/{len(results)} 成功"
+        if success:
+            msg += "\n成功基线: " + "; ".join([f"{name}:{r[1].get('baseline', 0)}" for name, r in success])
+        if failed:
+            msg += "\n失败: " + "; ".join([f"{name}:{(r[1] or {}).get('reason','unknown')}" for name, r in failed])
+        QMessageBox.information(self, tr("main.dialog.info"), msg)
     def force_refresh_devices(self):
         """强制重新扫描设备硬件（原刷新按钮的行为）"""
         self.last_device_scan = 0  # 强制重新扫描
         self.refresh_devices()
+
+    def calibrate_single_device(self, device_data: dict, show_message: bool = True):
+        """对单个设备校零"""
+        if not device_data:
+            if show_message:
+                QMessageBox.warning(self, tr("main.dialog.warning"), "无效的设备信息")
+            return None
+        port = device_data.get("device")
+        device_id = device_data.get("device_id") or port
+        baudrate = int(device_data.get("baudrate", 512000))
+        try:
+            res = self.backend.calibrate_device(device_id=device_id, port=port, baudrate=baudrate)
+        except Exception as e:
+            res = {"status": "fail", "reason": str(e)}
+
+        if show_message:
+            if res.get("status") == "ok":
+                QMessageBox.information(self, tr("main.dialog.success"), f"{device_id} 校零完成，基线={res.get('baseline', 0)}")
+            else:
+                QMessageBox.warning(self, tr("main.dialog.warning"), f"{device_id} 校零失败: {res.get('reason', 'unknown')}")
+        return res
+
+    def show_device_context_menu(self, pos):
+        item = self.device_list.itemAt(pos)
+        if not item:
+            return
+        device_data = item.data(Qt.UserRole + 1)
+        menu = QMenu(self)
+        calibrate_action = menu.addAction("Calibrate")
+        action = menu.exec_(self.device_list.mapToGlobal(pos))
+        if action == calibrate_action:
+            self.calibrate_single_device(device_data, show_message=True)
     def on_device_selected(self, current, previous):
         """Handle device selection"""
         # 保存上一个设备的工作流配置和测试信息
@@ -1445,6 +1506,7 @@ class DeviceControlWidget(QWidget):
 
         # Update buttons
         self.refresh_btn.setText(tr("device_control.refresh_button"))
+        self.calibrate_all_btn.setText("Calibrate All")
         self.start_btn.setText(tr("device_control.start_test"))
         self.stop_btn.setText(tr("device_control.stop_test"))
         self.export_btn.setText(tr("device_control.export_workflow"))

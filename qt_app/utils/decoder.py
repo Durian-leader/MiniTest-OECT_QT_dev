@@ -145,18 +145,7 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
     
     # Define bias current correction
     # bias_current is calibrated at reference transimpedance, scale for other values
-    bias_reference_transimpedance = get_bias_reference_transimpedance()
-    bias_current_raw = get_bias_current()
-
-    try:
-        transimpedance_ohms = float(transimpedance_ohms)
-    except (TypeError, ValueError):
-        transimpedance_ohms = 100.0
-    if transimpedance_ohms <= 0:
-        transimpedance_ohms = 100.0
-
-    # Scale bias current according to transimpedance ratio
-    bias_current = bias_current_raw * (bias_reference_transimpedance / transimpedance_ohms)
+    bias_current = 0.0
     
     # Initialize result list
     result = []
