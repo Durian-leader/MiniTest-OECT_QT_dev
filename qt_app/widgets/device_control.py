@@ -2,6 +2,7 @@ import sys
 import json
 import uuid
 import time
+import copy
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QListWidget, QListWidgetItem, QSplitter, QMessageBox,
                             QFileDialog, QFrame, QGroupBox, QMenu, QProgressDialog,
@@ -513,17 +514,23 @@ class DeviceControlWidget(QWidget):
             if self.selected_port:
                 self.save_current_workflow()
                 steps = self.workflow_editor.get_steps()
-                self._sync_workflow = steps.copy()  # Store the sync workflow
+                self._sync_workflow = copy.deepcopy(steps)  # Store the sync workflow
                 # Apply the same workflow to all devices
                 for i in range(self.device_list.count()):
                     item = self.device_list.item(i)
                     if item:
                         port = item.data(Qt.UserRole)
-                        self.workflows[port] = steps.copy()
+                        self.workflows[port] = copy.deepcopy(steps)
             
             logger.info("同步工作流模式已启用")
         else:
-            # Clear sync workflow when disabling
+            # Clear sync workflow when disabling and break shared references
+            steps = self.workflow_editor.get_steps()
+            for i in range(self.device_list.count()):
+                item = self.device_list.item(i)
+                if item:
+                    port = item.data(Qt.UserRole)
+                    self.workflows[port] = copy.deepcopy(steps)
             if hasattr(self, '_sync_workflow'):
                 del self._sync_workflow
             logger.info("同步工作流模式已禁用")
@@ -542,18 +549,18 @@ class DeviceControlWidget(QWidget):
         """当工作流被更新时保存当前工作流"""
         if self.selected_port:
             # 保存当前工作流到字典中
-            self.workflows[self.selected_port] = self.workflow_editor.get_steps()
+            current_steps = self.workflow_editor.get_steps()
+            self.workflows[self.selected_port] = copy.deepcopy(current_steps)
             # 记录工作流被修改的标记
             
             # In sync mode, update all devices with the same workflow
             if self.sync_workflow_enabled:
-                steps = self.workflow_editor.get_steps()
-                self._sync_workflow = steps.copy()  # Update sync workflow
+                self._sync_workflow = copy.deepcopy(current_steps)  # Update sync workflow
                 for i in range(self.device_list.count()):
                     item = self.device_list.item(i)
                     if item:
                         port = item.data(Qt.UserRole)
-                        self.workflows[port] = steps.copy()
+                        self.workflows[port] = copy.deepcopy(current_steps)
             logger.info(f"已保存设备 {self.selected_port} 的工作流配置，共 {len(self.workflows[self.selected_port])} 个步骤")
     
     def save_current_workflow(self):
@@ -561,7 +568,7 @@ class DeviceControlWidget(QWidget):
         if self.selected_port:
             current_steps = self.workflow_editor.get_steps()
             if current_steps:  # 只在有步骤时保存，避免覆盖已有配置
-                self.workflows[self.selected_port] = current_steps
+                self.workflows[self.selected_port] = copy.deepcopy(current_steps)
                 logger.info(f"保存设备 {self.selected_port} 的工作流配置，共 {len(current_steps)} 个步骤")
     
     def save_current_test_info(self):
@@ -1062,7 +1069,7 @@ class DeviceControlWidget(QWidget):
                 
                 # Check if device is already testing
                 if port in self.current_test_ids:
-                    device_name = device_info.get('device_id', port) if device_info else port
+                    device_name = (device_info.get('device_id') or port) if device_info else port
                     reply = QMessageBox.question(
                         self, 
                         "设备正在测试中", 
@@ -1101,7 +1108,7 @@ class DeviceControlWidget(QWidget):
             test_id = f"test_{time.strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:8]}"
             
             # Get device-specific test info
-            device_id = device_info.get('device_id', port)
+            device_id = (device_info.get('device_id') or port) if device_info else port
             
             # Get device-specific test information
             if port in self.test_info:

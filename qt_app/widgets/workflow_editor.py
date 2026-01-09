@@ -1,5 +1,6 @@
 import uuid
 import json
+import copy
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QScrollArea, 
                            QPushButton, QLabel, QFrame, QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -188,12 +189,12 @@ class WorkflowEditorWidget(QWidget):
     
     def set_steps(self, steps):
         """Set the workflow steps"""
-        self.steps = steps.copy() if steps else []
+        self.steps = copy.deepcopy(steps) if steps else []
         self.refresh_steps()
     
     def get_steps(self):
         """Get the current workflow steps"""
-        return self.steps.copy()
+        return copy.deepcopy(self.steps)
 
     def update_translations(self):
         """Update all UI text when language changes"""
