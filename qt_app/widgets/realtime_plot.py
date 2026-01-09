@@ -64,7 +64,7 @@ class RealtimePlotWidget(QWidget):
         self._debug_update_interval = 0.2
         self._last_autorange_update = 0.0
         self._autorange_interval = 0.5
-        self.display_max_points = 3000
+        self.display_max_points = None
         
         # 设置UI
         self.setup_ui()
@@ -879,8 +879,16 @@ class RealtimePlotWidget(QWidget):
             self.data_x = np.append(self.data_x, buffer_x)
             self.data_y = np.append(self.data_y, buffer_y)
         
-        # 内存保护
-        if self.use_circular_buffer and len(self.data_x) > self.MAX_POINTS:
+        # 内存保护（transient启用时间窗口时改为时间裁剪）
+        if self.current_step_type == 'transient' and self.auto_scrolling_enabled and self.data_x.size:
+            max_time = self.data_x[-1]
+            window_start = max_time - self.window_size
+            if window_start > 0:
+                start_idx = np.searchsorted(self.data_x, window_start, side="left")
+                if start_idx > 0:
+                    self.data_x = self.data_x[start_idx:]
+                    self.data_y = self.data_y[start_idx:]
+        elif self.use_circular_buffer and len(self.data_x) > self.MAX_POINTS:
             self.data_x = self.data_x[-self.MAX_POINTS:]
             self.data_y = self.data_y[-self.MAX_POINTS:]
         
@@ -901,7 +909,7 @@ class RealtimePlotWidget(QWidget):
         # 更新图表数据（显示端采样）
         display_x = self.data_x
         display_y = self.data_y
-        if total_points > self.display_max_points:
+        if self.display_max_points and total_points > self.display_max_points:
             indices = np.linspace(0, total_points - 1, self.display_max_points, dtype=int)
             display_x = self.data_x[indices]
             display_y = self.data_y[indices]
@@ -911,7 +919,9 @@ class RealtimePlotWidget(QWidget):
         self.sliding_window()
         
         # 更新数据计数
-        if self.use_circular_buffer and self.total_received_points > self.MAX_POINTS:
+        if self.current_step_type == 'transient' and self.auto_scrolling_enabled:
+            self.data_count_label.setText(tr("realtime.points_label", count=total_points))
+        elif self.use_circular_buffer and self.total_received_points > self.MAX_POINTS:
             self.data_count_label.setText(
                 tr("realtime.points_label_discarded", 
                    shown=total_points, 
