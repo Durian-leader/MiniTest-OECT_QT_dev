@@ -120,7 +120,8 @@ class ProcessDataBridge:
         await self.send_message(test_id, message, is_test_id=True)
     
     async def send_data(self, test_id: str, data: Any, step_type: str, device_id: Optional[str] = None,
-                      workflow_info: Optional[Dict[str, Any]] = None, recv_ts: Optional[float] = None):
+                      workflow_info: Optional[Dict[str, Any]] = None, recv_ts: Optional[float] = None,
+                      batch_points: Optional[int] = None):
         """
         发送数据消息的便捷函数 - 只发送到数据传输进程，不再发送到保存进程
         
@@ -140,6 +141,8 @@ class ProcessDataBridge:
         }
         if recv_ts:
             message["recv_ts"] = recv_ts
+        if batch_points is not None:
+            message["batch_points"] = batch_points
         
         # 添加设备ID
         if device_id:
@@ -1244,6 +1247,7 @@ def initialize_test_step_classes(data_bridge):
             first_info = None
             latest_info = None
             first_recv_ts = None
+            total_bytes = 0
             
             while buffer['data']:
                 item = buffer['data'].popleft()
@@ -1256,10 +1260,12 @@ def initialize_test_step_classes(data_bridge):
                         hex_chunks.append(hex_data.replace(" ", ""))
                     else:
                         hex_chunks.append(hex_data)
+                    total_bytes += len(hex_chunks[-1]) // 2
                 elif isinstance(hex_data, (bytes, bytearray)):
                     if hex_chunks:
                         mixed_types = True
                     byte_chunks.append(bytes(hex_data))
+                    total_bytes += len(byte_chunks[-1])
                 
                 if first_info is None:
                     first_info = item['workflow_info']
@@ -1277,6 +1283,20 @@ def initialize_test_step_classes(data_bridge):
             elif byte_chunks:
                 combined_data = b"".join(byte_chunks)
             
+            # 估算这个批次的数据点数量，方便前端算速率
+            packet_size = 5
+            if step_type == "transient":
+                try:
+                    packet_size = int(first_info.get("transient_packet_size", 7))
+                except Exception:
+                    packet_size = 7
+                if packet_size not in (7, 9):
+                    packet_size = 7
+            bytes_len = total_bytes if combined_data is not None else 0
+            if isinstance(combined_data, str):
+                bytes_len = len(combined_data) // 2
+            batch_points = bytes_len // packet_size if packet_size else 0
+
             # 发送合并数据 - 使用第一个数据包的工作流信息确保步骤正确性
             if combined_data is not None and combined_data != b"" and combined_data != "" and first_info:
                 try:
@@ -1287,7 +1307,8 @@ def initialize_test_step_classes(data_bridge):
                             step_type=step_type,  # 使用明确的步骤类型
                             device_id=first_info.get('device_id', ''),
                             workflow_info=first_info,  # 使用第一个数据包的信息
-                            recv_ts=first_recv_ts
+                            recv_ts=first_recv_ts,
+                            batch_points=batch_points
                         )
                     )
                     logger.debug(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_data)}")

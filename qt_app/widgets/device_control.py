@@ -168,6 +168,8 @@ class DeviceControlWidget(QWidget):
         self.data_count = 0
         self._latency_sum = 0.0
         self._latency_count = 0
+        self._points_sum = 0
+        self._points_duration = 0.0
         
         # Setup UI
         self.setup_ui()
@@ -1216,6 +1218,13 @@ class DeviceControlWidget(QWidget):
                     self._latency_count += 1
                 except Exception:
                     pass
+            # 累计本批数据点数用于速率估计
+            batch_points = data.get("batch_points")
+            if isinstance(batch_points, (int, float)) and batch_points > 0:
+                self._points_sum += batch_points
+                # 按照接收时间窗口累加持续时间
+                if self._latency_count == 0:
+                    self._points_duration += 0.1
             
             # 处理数据
             test_id = data.get('test_id')
@@ -1242,15 +1251,23 @@ class DeviceControlWidget(QWidget):
         time_diff = now - self.last_data_time
         if time_diff > 1.0:  # 每秒更新一次统计
             data_rate = self.data_count / time_diff
+            latency_part = ""
             if self._latency_count:
                 avg_latency = self._latency_sum / self._latency_count
-                self.data_status.setText(f"Data rate: {data_rate:.1f} msgs/sec | avg latency {avg_latency:.1f} ms")
-            else:
-                self.data_status.setText(f"Data rate: {data_rate:.1f} msgs/sec | Processed batch: {processed}")
+                latency_part = f" | avg latency {avg_latency:.1f} ms"
+
+            pts_part = ""
+            if self._points_sum and time_diff:
+                pts_rate = self._points_sum / time_diff
+                pts_part = f" | ~{pts_rate:.0f} pts/s"
+
+            self.data_status.setText(f"Data rate: {data_rate:.1f} msgs/sec{latency_part}{pts_part}")
             self.last_data_time = now
             self.data_count = 0
             self._latency_sum = 0.0
             self._latency_count = 0
+            self._points_sum = 0
+            self._points_duration = 0.0
         else:
             self.data_count += processed
     
