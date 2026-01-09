@@ -644,34 +644,11 @@ class RealtimePlotWidget(QWidget):
         # 添加数据点到缓冲区，带数据验证
         if new_points:
             self.total_received_points += len(new_points)
-            if mode == 'transfer':
+            if mode in ('transfer', 'transient'):
                 self.new_point_buffer_x.extend([point[0] for point in new_points])
                 self.new_point_buffer_y.extend([point[1] for point in new_points])
                 self._set_debug_message(tr("realtime.added_points", count=len(new_points), mode=mode))
                 return
-
-            valid_x = []
-            valid_y = []
-            for x_val, y_val in new_points:
-                if not (np.isfinite(x_val) and np.isfinite(y_val)):
-                    logger.warning(f"跳过非有效数值: x={x_val}, y={y_val}")
-                    continue
-                # 时间应该是正数且在合理范围内（例如 < 10000秒）
-                if x_val < 0 or x_val > 10000:
-                    logger.warning(f"跳过异常时间值: {x_val}s")
-                    continue
-                if abs(y_val) > 1.0:
-                    logger.warning(f"跳过异常电流值: {y_val}A")
-                    continue
-                valid_x.append(x_val)
-                valid_y.append(y_val)
-
-            if valid_x:
-                self.new_point_buffer_x.extend(valid_x)
-                self.new_point_buffer_y.extend(valid_y)
-                self._set_debug_message(tr("realtime.added_points", count=len(valid_x), mode=mode))
-            else:
-                logger.warning(f"所有 {len(new_points)} 个数据点都被过滤")
     
     def process_output_step(self, hex_data):
         """处理output步骤 - 使用多曲线逻辑"""

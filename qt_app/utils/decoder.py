@@ -165,11 +165,41 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
     if not byte_data or len(byte_data) < packet_size:
         logger.debug(f"解码: 数据为空或长度不足 ({len(byte_data) if byte_data else 0} 字节)")
         return result
-    
+
     try:
         # Print some debug info
         logger.debug(f"解码: 模式={mode}, 数据长度={len(byte_data)}字节, 包大小={packet_size}字节")
-        
+
+        if mode == 'transient':
+            # Fast path for transient using vectorized numpy operations
+            total_packets = len(byte_data) // packet_size
+            if total_packets == 0:
+                return result
+            usable_bytes = total_packets * packet_size
+            data = np.frombuffer(byte_data[:usable_bytes], dtype=np.uint8).reshape(total_packets, packet_size)
+
+            ts = (data[:, 0].astype(np.uint32) |
+                  (data[:, 1].astype(np.uint32) << 8) |
+                  (data[:, 2].astype(np.uint32) << 16) |
+                  (data[:, 3].astype(np.uint32) << 24))
+
+            if packet_size == 9:
+                current_bytes = data[:, 6:9]
+            else:
+                current_bytes = data[:, 4:7]
+
+            raw = (current_bytes[:, 0].astype(np.uint32) << 16) | (current_bytes[:, 1].astype(np.uint32) << 8) | current_bytes[:, 2].astype(np.uint32)
+            neg_mask = (raw & 0x00800000) != 0
+            raw_neg = ((~raw) & 0x007FFFFF) + 1
+            voltage = np.where(neg_mask,
+                               -(raw_neg.astype(np.float64) / 8388608.0) * 2.048,
+                               (raw.astype(np.float64) / 8388607.0) * 2.048)
+
+            current_value = -voltage / transimpedance_ohms - bias_current
+            result = np.column_stack((ts.astype(np.float64) / 1000.0, current_value)).tolist()
+            logger.debug(f"解码完成: 生成了 {len(result)} 个数据点")
+            return result
+
         # *** 改进：检查是否包含output结束序列 ***
         if contains_output_end_sequence(byte_data):
             logger.debug("检测到output结束序列，将在处理中跳过")
