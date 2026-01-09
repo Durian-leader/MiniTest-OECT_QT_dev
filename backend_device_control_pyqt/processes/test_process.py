@@ -949,6 +949,7 @@ class TestManager:
                     return {"status": "fail", "reason": "device_busy"}
 
         dev_key = device_id or port
+        device = None
         ok, device = await self.get_or_create_device(dev_key, port, baudrate)
         if not ok or device is None:
             return {"status": "fail", "reason": "connect_failed"}
@@ -1005,6 +1006,26 @@ class TestManager:
         except Exception as e:
             logger.error(f"校零失败: {e}")
             return {"status": "fail", "reason": str(e)}
+        finally:
+            # 校零结束后释放串口，避免刷新设备时占用端口
+            if device is not None:
+                try:
+                    in_use = any(did == dev_key for did in self.test_to_device.values())
+                    if not in_use:
+                        await device.disconnect()
+                        self.active_devices.pop(dev_key, None)
+                        self.device_status[dev_key] = {
+                            "connected": False,
+                            "port": port,
+                            "baudrate": baudrate,
+                            "last_updated": time.time()
+                        }
+                        await self.data_bridge.send_device_status(
+                            device_id=dev_key,
+                            status="disconnected"
+                        )
+                except Exception as cleanup_err:
+                    logger.error(f"校零后释放设备失败: {cleanup_err}")
 
     async def run_test(self, test: Test):
         """
