@@ -846,8 +846,10 @@ class DeviceControlWidget(QWidget):
             
             if result.get("status") == "ok":
                 # Reset data counters
-                self.last_data_time = time.time()
-                self.data_count = 0
+        self.last_data_time = time.time()
+        self.data_count = 0
+        self._latency_sum = 0.0
+        self._latency_count = 0
                 
                 # Store test ID for this device
                 self.current_test_ids[self.selected_port] = test_id
@@ -1192,6 +1194,7 @@ class DeviceControlWidget(QWidget):
         # 批量处理队列中的所有消息
         processed = 0
         max_process = 500  # 一次循环中最多处理500条消息，避免无限循环
+        now = time.time()
         
         while processed < max_process:
             # 非阻塞方式获取数据
@@ -1201,6 +1204,16 @@ class DeviceControlWidget(QWidget):
             
             # *** 新增：检查测试完成消息 ***
             self.handle_backend_message(data)
+            
+            # 轻量级时延统计（采集→UI）
+            recv_ts = data.get("recv_ts") or data.get("timestamp")
+            if recv_ts:
+                try:
+                    latency_ms = (now - recv_ts) * 1000.0
+                    self._latency_sum += latency_ms
+                    self._latency_count += 1
+                except Exception:
+                    pass
             
             # 处理数据
             test_id = data.get('test_id')
@@ -1227,9 +1240,15 @@ class DeviceControlWidget(QWidget):
         time_diff = now - self.last_data_time
         if time_diff > 1.0:  # 每秒更新一次统计
             data_rate = self.data_count / time_diff
-            self.data_status.setText(f"Data rate: {data_rate:.1f} msgs/sec | Processed batch: {processed}")
+            if self._latency_count:
+                avg_latency = self._latency_sum / self._latency_count
+                self.data_status.setText(f"Data rate: {data_rate:.1f} msgs/sec | avg latency {avg_latency:.1f} ms")
+            else:
+                self.data_status.setText(f"Data rate: {data_rate:.1f} msgs/sec | Processed batch: {processed}")
             self.last_data_time = now
             self.data_count = 0
+            self._latency_sum = 0.0
+            self._latency_count = 0
         else:
             self.data_count += processed
     

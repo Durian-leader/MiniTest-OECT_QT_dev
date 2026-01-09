@@ -120,7 +120,7 @@ class ProcessDataBridge:
         await self.send_message(test_id, message, is_test_id=True)
     
     async def send_data(self, test_id: str, data: Any, step_type: str, device_id: Optional[str] = None,
-                      workflow_info: Optional[Dict[str, Any]] = None):
+                      workflow_info: Optional[Dict[str, Any]] = None, recv_ts: Optional[float] = None):
         """
         发送数据消息的便捷函数 - 只发送到数据传输进程，不再发送到保存进程
         
@@ -138,6 +138,8 @@ class ProcessDataBridge:
             "step_type": step_type,
             "data": data
         }
+        if recv_ts:
+            message["recv_ts"] = recv_ts
         
         # 添加设备ID
         if device_id:
@@ -1195,6 +1197,7 @@ def initialize_test_step_classes(data_bridge):
         def add_data(self, test_id, step_type, hex_data, workflow_info):
             """添加数据到对应步骤的缓冲区"""
             buffer = self.buffers[test_id][step_type]
+            recv_ts = time.time()
             
             # 检测步骤变化 - 如果step_index变了，立即刷新旧缓冲区
             current_step_index = workflow_info.get('step_index', 0) if workflow_info else 0
@@ -1208,7 +1211,8 @@ def initialize_test_step_classes(data_bridge):
             buffer['data'].append({
                 'hex_data': hex_data,
                 'workflow_info': workflow_info,
-                'timestamp': time.time()
+                'timestamp': recv_ts,
+                'recv_ts': recv_ts
             })
             buffer['step_info'] = workflow_info
             
@@ -1239,6 +1243,7 @@ def initialize_test_step_classes(data_bridge):
             mixed_types = False
             first_info = None
             latest_info = None
+            first_recv_ts = None
             
             while buffer['data']:
                 item = buffer['data'].popleft()
@@ -1258,6 +1263,7 @@ def initialize_test_step_classes(data_bridge):
                 
                 if first_info is None:
                     first_info = item['workflow_info']
+                    first_recv_ts = item.get('recv_ts')
                 latest_info = item['workflow_info']
 
             combined_data = None
@@ -1280,7 +1286,8 @@ def initialize_test_step_classes(data_bridge):
                             data=combined_data,
                             step_type=step_type,  # 使用明确的步骤类型
                             device_id=first_info.get('device_id', ''),
-                            workflow_info=first_info  # 使用第一个数据包的信息
+                            workflow_info=first_info,  # 使用第一个数据包的信息
+                            recv_ts=first_recv_ts
                         )
                     )
                     logger.debug(f"发送缓冲数据: test_id={test_id}, step_type={step_type}, data_len={len(combined_data)}")
