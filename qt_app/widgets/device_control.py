@@ -64,9 +64,11 @@ class CalibrationWorker(QObject):
                 if not self._cancelled:
                     self.progress.emit(current, total_count, device_id, res)
 
-            results = self.backend.calibrate_devices(self.devices, progress_callback=on_progress)
-            if self._cancelled:
-                return
+            results = self.backend.calibrate_devices(
+                self.devices,
+                progress_callback=on_progress,
+                cancel_check=lambda: self._cancelled
+            )
             self.finished.emit(results)
             return
 

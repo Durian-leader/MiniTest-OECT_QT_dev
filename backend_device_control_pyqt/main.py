@@ -466,7 +466,8 @@ class MedicalTestBackend:
 
     def calibrate_devices(self, devices: List[Dict[str, Any]],
                           progress_callback=None,
-                          timeout_per_device: float = 15.0) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+                          timeout_per_device: float = 15.0,
+                          cancel_check=None) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
         """并行校零多个设备，返回 (device_data, result) 列表"""
         if not self.is_running:
             return [(device, {"status": "fail", "reason": "Backend not running"}) for device in devices]
@@ -498,6 +499,8 @@ class MedicalTestBackend:
         completed = 0
 
         while pending and (time.time() - start_time) < timeout:
+            if cancel_check and cancel_check():
+                break
             try:
                 response = self.test_to_qt_queue.get(block=True, timeout=0.5)
             except (mp.queues.Empty, ConnectionError, BrokenPipeError, EOFError):
@@ -515,8 +518,18 @@ class MedicalTestBackend:
                 progress_callback(completed, total, device_name, response)
 
         if pending:
+            cancelled = bool(cancel_check and cancel_check())
             for request_id, device in list(pending.items()):
-                response = {"status": "fail", "reason": "calibration_timeout", "request_id": request_id}
+                if cancelled:
+                    device_id = device.get("device_id") or device.get("device")
+                    self.qt_to_test_queue.put({
+                        "type": MSG_STOP_TEST,
+                        "device_id": device_id,
+                        "test_id": None
+                    })
+                    response = {"status": "fail", "reason": "calibration_cancelled", "request_id": request_id}
+                else:
+                    response = {"status": "fail", "reason": "calibration_timeout", "request_id": request_id}
                 results.append((device, response))
                 completed += 1
                 if progress_callback:
