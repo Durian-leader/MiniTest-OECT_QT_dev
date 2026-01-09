@@ -1233,7 +1233,7 @@ def initialize_test_step_classes(data_bridge):
                 return
                 
             # 合并同一步骤类型的数据
-            combined_hex = ""
+            hex_chunks = []
             first_info = None
             latest_info = None
             
@@ -1242,13 +1242,18 @@ def initialize_test_step_classes(data_bridge):
                 hex_data = item['hex_data']
                 
                 if isinstance(hex_data, str):
-                    combined_hex += hex_data.replace(" ", "")
+                    if " " in hex_data:
+                        hex_chunks.append(hex_data.replace(" ", ""))
+                    else:
+                        hex_chunks.append(hex_data)
                 elif isinstance(hex_data, (bytes, bytearray)):
-                    combined_hex += hex_data.hex().upper()
+                    hex_chunks.append(hex_data.hex().upper())
                 
                 if first_info is None:
                     first_info = item['workflow_info']
                 latest_info = item['workflow_info']
+
+            combined_hex = "".join(hex_chunks)
             
             # 发送合并数据 - 使用第一个数据包的工作流信息确保步骤正确性
             if combined_hex and first_info:

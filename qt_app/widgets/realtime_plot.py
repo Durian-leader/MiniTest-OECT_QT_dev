@@ -1,4 +1,5 @@
 import numpy as np
+import time
 import traceback
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QCheckBox, QPushButton
 from PyQt5.QtCore import Qt, QTimer
@@ -55,6 +56,15 @@ class RealtimePlotWidget(QWidget):
         # 滚动窗口设置
         self.window_size = 10.0
         self.auto_scrolling_enabled = True
+
+        # UI更新节流/绘图优化
+        self._last_label_step_type = None
+        self._last_step_info_text = None
+        self._last_debug_update = 0.0
+        self._debug_update_interval = 0.2
+        self._last_autorange_update = 0.0
+        self._autorange_interval = 0.5
+        self.display_max_points = 3000
         
         # 设置UI
         self.setup_ui()
@@ -206,6 +216,43 @@ class RealtimePlotWidget(QWidget):
         debug_layout.addWidget(self.data_count_label)
         
         layout.addWidget(debug_frame)
+
+    def _set_debug_message(self, text, force=False):
+        """Throttled debug label updates to avoid UI overload."""
+        now = time.time()
+        if force or (now - self._last_debug_update) >= self._debug_update_interval:
+            if self.debug_label.text() != text:
+                self.debug_label.setText(text)
+            self._last_debug_update = now
+
+    def _update_step_info_label(self, text):
+        """Update step info only when it changes."""
+        if text != self._last_step_info_text:
+            self.step_info_label.setText(text)
+            self._last_step_info_text = text
+
+    def _apply_step_labels(self, step_type):
+        """Update axis labels/title only when step type changes."""
+        if step_type == 'transient':
+            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_time"))
+            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+            self.plot_widget.setTitle(tr("realtime.title_transient"))
+        elif step_type == 'output':
+            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_drain_voltage"))
+            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+            self.plot_widget.setTitle(tr("realtime.title_output"))
+        else:
+            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_gate_voltage"))
+            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
+            self.plot_widget.setTitle(tr("realtime.title_transfer"))
+        self._last_label_step_type = step_type
+
+    def _maybe_enable_autorange(self, x=False, y=False, force=False):
+        """Limit expensive autorange recalculations."""
+        now = time.time()
+        if force or (now - self._last_autorange_update) >= self._autorange_interval:
+            self.plot_widget.enableAutoRange(x=x, y=y)
+            self._last_autorange_update = now
     
     def toggle_circular_buffer(self, enabled):
         """开关环形缓冲区"""
@@ -268,7 +315,7 @@ class RealtimePlotWidget(QWidget):
 
         # 更新UI
         self.data_count_label.setText(tr("realtime.points_label", count=0))
-        self.debug_label.setText(tr("realtime.chart_cleared"))
+        self._set_debug_message(tr("realtime.chart_cleared"), force=True)
     
     def reset_plot_for_step_type(self, step_type):
         """根据步骤类型重置绘图对象"""
@@ -293,7 +340,7 @@ class RealtimePlotWidget(QWidget):
         # output类型的绘图对象会在接收到数据时动态创建
         
         # 关键修复：重置视图范围，启用自动范围调整
-        self.plot_widget.enableAutoRange(x=True, y=True)
+        self._maybe_enable_autorange(x=True, y=True, force=True)
         logger.info(f"重置绘图对象并启用自动范围调整: {step_type}")
     
     def update_status_label(self):
@@ -318,6 +365,8 @@ class RealtimePlotWidget(QWidget):
         # 重置步骤跟踪
         self.current_step_index = -1
         self.current_step_id = ""
+        self._last_label_step_type = None
+        self._last_step_info_text = None
         
         # 清除所有数据
         self.clear_data()
@@ -325,9 +374,10 @@ class RealtimePlotWidget(QWidget):
         # 更新UI
         self.update_status_label()
         self.path_frame.setVisible(False)
-        self.debug_label.setText(f"Test ID set: {test_id}")
+        self._set_debug_message(f"Test ID set: {test_id}", force=True)
         self.data_count_label.setText(tr("realtime.points_label", count=0))
         self.step_info_label.setText(tr("realtime.waiting_data"))
+        self._last_step_info_text = self.step_info_label.text()
         
         # 重置图表
         self.plot_widget.setTitle(tr("realtime.waiting_data_title"))
@@ -381,6 +431,8 @@ class RealtimePlotWidget(QWidget):
             if segments:
                 localized_path = " > ".join(collapsed)
 
+            if localized_path == self.path_readable and self.path_frame.isVisible():
+                return
             self.path_readable = localized_path
             self.path_label.setText(localized_path)
             self.path_frame.setVisible(True)
@@ -471,7 +523,7 @@ class RealtimePlotWidget(QWidget):
             
             # 关键修复：创建第一条output曲线时启用自动范围调整
             if len(self.plot_lines) == 1:
-                self.plot_widget.enableAutoRange(x=True, y=True)
+                self._maybe_enable_autorange(x=True, y=True, force=True)
                 logger.info(f"创建第一条output曲线，启用自动范围调整")
             
             logger.info(f"为栅极电压 {gate_voltage}mV 创建曲线: {curve_name}")
@@ -490,7 +542,7 @@ class RealtimePlotWidget(QWidget):
         """处理来自后端的消息 - 修复版本"""
         try:
             msg_type = message.get("type")
-            self.debug_label.setText(tr("realtime.received", type=msg_type))
+            self._set_debug_message(tr("realtime.received", type=msg_type))
             
             if msg_type == "test_data":
                 # 获取原始数据
@@ -522,19 +574,21 @@ class RealtimePlotWidget(QWidget):
                     self.clear_data()
                     # 重置绘图对象
                     self.reset_plot_for_step_type(step_type)
-                    self.debug_label.setText(tr("realtime.step_changed", old=self.current_step_type, new=step_type))
+                    self._set_debug_message(tr("realtime.step_changed", old=self.current_step_type, new=step_type), force=True)
                 
                 # 更新当前步骤信息
                 self.current_step_type = step_type
                 self.current_step_index = step_index
                 self.current_step_id = step_id
+                if step_changed or step_type != self._last_label_step_type:
+                    self._apply_step_labels(step_type)
                 
                 # 显示步骤信息
                 if path_readable:
                     self.set_path_readable(path_readable, step_type)
-                    self.step_info_label.setText(tr("realtime.step_info_with_path", type=step_type, index=step_index))
+                    self._update_step_info_label(tr("realtime.step_info_with_path", type=step_type, index=step_index))
                 else:
-                    self.step_info_label.setText(tr("realtime.step_info", type=step_type))
+                    self._update_step_info_label(tr("realtime.step_info", type=step_type))
                 
                 # 如果是新步骤，确保有正确的绘图对象
                 if step_changed or not self.single_plot_line and step_type in ['transfer', 'transient']:
@@ -557,7 +611,7 @@ class RealtimePlotWidget(QWidget):
                 self.set_test_completed()
         
         except Exception as e:
-            self.debug_label.setText(tr("realtime.error", error=str(e)))
+            self._set_debug_message(tr("realtime.error", error=str(e)), force=True)
             logger.error(f"Error processing message: {str(e)}")
             traceback.print_exc()
     
@@ -565,18 +619,8 @@ class RealtimePlotWidget(QWidget):
         """处理传统步骤（transfer/transient）- 使用单曲线逻辑"""
         if not hex_data:
             return
-            
-        # 更新坐标轴标签
-        if step_type == 'transient':
-            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_time"))
-            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
-            self.plot_widget.setTitle(tr("realtime.title_transient"))
-            mode = 'transient'
-        else:  # transfer
-            self.plot_widget.setLabel('bottom', tr("realtime.x_axis_gate_voltage"))
-            self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
-            self.plot_widget.setTitle(tr("realtime.title_transfer"))
-            mode = 'transfer'
+
+        mode = 'transient' if step_type == 'transient' else 'transfer'
         
         # 确保有单曲线绘图对象
         if not self.single_plot_line:
@@ -600,41 +644,32 @@ class RealtimePlotWidget(QWidget):
         # 添加数据点到缓冲区，带数据验证
         if new_points:
             self.total_received_points += len(new_points)
-            valid_points = 0
+            if mode == 'transfer':
+                self.new_point_buffer_x.extend([point[0] for point in new_points])
+                self.new_point_buffer_y.extend([point[1] for point in new_points])
+                self._set_debug_message(tr("realtime.added_points", count=len(new_points), mode=mode))
+                return
 
-            for point in new_points:
-                x_val = point[0]
-                y_val = point[1]
-
-                # 数据验证：检查有效性
+            valid_x = []
+            valid_y = []
+            for x_val, y_val in new_points:
                 if not (np.isfinite(x_val) and np.isfinite(y_val)):
                     logger.warning(f"跳过非有效数值: x={x_val}, y={y_val}")
                     continue
-
-                # 根据模式验证范围
-                if mode == 'transient':
-                    # 时间应该是正数且在合理范围内（例如 < 1000秒）
-                    if x_val < 0 or x_val > 10000:
-                        logger.warning(f"跳过异常时间值: {x_val}s")
-                        continue
-                else:  # transfer
-                    # 电压范围检查
-                    if abs(x_val) > 5.0:
-                        logger.warning(f"跳过异常电压值: {x_val}V")
-                        continue
-
-                # 电流范围检查
+                # 时间应该是正数且在合理范围内（例如 < 10000秒）
+                if x_val < 0 or x_val > 10000:
+                    logger.warning(f"跳过异常时间值: {x_val}s")
+                    continue
                 if abs(y_val) > 1.0:
                     logger.warning(f"跳过异常电流值: {y_val}A")
                     continue
+                valid_x.append(x_val)
+                valid_y.append(y_val)
 
-                # 数据有效，添加到缓冲区
-                self.new_point_buffer_x.append(x_val)
-                self.new_point_buffer_y.append(y_val)
-                valid_points += 1
-
-            if valid_points > 0:
-                self.debug_label.setText(tr("realtime.added_points", count=valid_points, mode=mode))
+            if valid_x:
+                self.new_point_buffer_x.extend(valid_x)
+                self.new_point_buffer_y.extend(valid_y)
+                self._set_debug_message(tr("realtime.added_points", count=len(valid_x), mode=mode))
             else:
                 logger.warning(f"所有 {len(new_points)} 个数据点都被过滤")
     
@@ -643,15 +678,10 @@ class RealtimePlotWidget(QWidget):
         if not hex_data:
             return
         
-        # 更新坐标轴标签
-        self.plot_widget.setLabel('bottom', tr("realtime.x_axis_drain_voltage"))
-        self.plot_widget.setLabel('left', tr("realtime.y_axis_current"))
-        self.plot_widget.setTitle(tr("realtime.title_output"))
-        
         # 关键修复：确保output步骤的视图范围正确
         # 只在第一次进入output步骤时触发
         if not self.plot_lines and not self.output_curves_data:
-            self.plot_widget.enableAutoRange(x=True, y=True)
+            self._maybe_enable_autorange(x=True, y=True, force=True)
             logger.info("首次进入output步骤，启用自动范围调整")
         
         # 解析output元数据
@@ -662,7 +692,7 @@ class RealtimePlotWidget(QWidget):
             gate_voltage = output_metadata["gate_voltage"]
             total_gate_voltages = output_metadata["total_gate_voltages"]
             self.prepare_output_curve(gate_voltage, total_gate_voltages)
-            self.debug_label.setText(tr("realtime.preparing_curve", voltage=gate_voltage))
+            self._set_debug_message(tr("realtime.preparing_curve", voltage=gate_voltage), force=True)
             
         elif signal_type == "data" and output_metadata:
             # 处理实际数据：多曲线模式
@@ -766,7 +796,7 @@ class RealtimePlotWidget(QWidget):
                 # 仅在接收到第一批数据时触发，避免频繁调整
                 total_curves_with_data = sum(1 for data in self.output_curves_data.values() if data['x'])
                 if total_curves_with_data <= 2 and len(self.output_curves_data[curve_name]['x']) <= 50:
-                    self.plot_widget.enableAutoRange(x=True, y=True)
+                    self._maybe_enable_autorange(x=True, y=True)
 
                 # 更新数据计数
                 total_points = sum(len(data['x']) for data in self.output_curves_data.values())
@@ -823,7 +853,7 @@ class RealtimePlotWidget(QWidget):
                 valid_points += 1
 
             if valid_points > 0:
-                self.debug_label.setText(tr("realtime.added_points_fallback", count=valid_points))
+                self._set_debug_message(tr("realtime.added_points_fallback", count=valid_points))
     
     def update_plot(self):
         """更新图表绘图"""
@@ -843,7 +873,7 @@ class RealtimePlotWidget(QWidget):
         if self.data_x.size == 0:
             self.data_x = buffer_x
             self.data_y = buffer_y
-            self.plot_widget.enableAutoRange(x=True, y=True)
+            self._maybe_enable_autorange(x=True, y=True, force=True)
         else:
             # 连接到现有数组
             self.data_x = np.append(self.data_x, buffer_x)
@@ -868,8 +898,14 @@ class RealtimePlotWidget(QWidget):
             self.single_plot_line.setSymbol('o') 
             self.single_plot_line.setSymbolSize(4)
         
-        # 更新图表数据
-        self.single_plot_line.setData(self.data_x, self.data_y)
+        # 更新图表数据（显示端采样）
+        display_x = self.data_x
+        display_y = self.data_y
+        if total_points > self.display_max_points:
+            indices = np.linspace(0, total_points - 1, self.display_max_points, dtype=int)
+            display_x = self.data_x[indices]
+            display_y = self.data_y[indices]
+        self.single_plot_line.setData(display_x, display_y)
         
         # 滚动窗口支持
         self.sliding_window()
@@ -893,10 +929,10 @@ class RealtimePlotWidget(QWidget):
                 if max_time > self.window_size:
                     min_time = max_time - self.window_size
                     self.plot_widget.setXRange(min_time, max_time)
-                    self.plot_widget.enableAutoRange(y=True)
+                    self._maybe_enable_autorange(y=True)
         else:
             # 其他图表类型自动调整范围
-            self.plot_widget.enableAutoRange(x=True, y=True)
+            self._maybe_enable_autorange(x=True, y=True)
     
     def start_new_test(self, test_id):
         """开始新的测试"""
@@ -907,12 +943,15 @@ class RealtimePlotWidget(QWidget):
         # 重置步骤跟踪
         self.current_step_index = -1
         self.current_step_id = ""
+        self._last_label_step_type = None
+        self._last_step_info_text = None
         
         # 清除所有数据
         self.clear_data()
         
         self.update_status_label()
         self.step_info_label.setText(tr("realtime.waiting_data"))
+        self._last_step_info_text = self.step_info_label.text()
         self.update_timer.start(100)
 
     def update_translations(self):
@@ -956,10 +995,11 @@ class RealtimePlotWidget(QWidget):
             self.step_info_label.setText(tr("realtime.step_info_with_path", type=self.current_step_type, index=self.current_step_index))
         else:
             self.step_info_label.setText(tr("realtime.step_info", type=self.current_step_type))
+        self._last_step_info_text = self.step_info_label.text()
 
         # Debug area
         if "Received" not in self.debug_label.text():
-             self.debug_label.setText(tr("realtime.no_data_received"))
+             self._set_debug_message(tr("realtime.no_data_received"))
         
         # This will be updated on the next data point, but we can update it now
         self.update_plot()
@@ -967,3 +1007,4 @@ class RealtimePlotWidget(QWidget):
         # Fallback name
         if self.single_plot_line and self.single_plot_line.name() == "Output Current":
             self.single_plot_line.setName(tr("realtime.output_current_fallback"))
+        self._last_label_step_type = self.current_step_type
