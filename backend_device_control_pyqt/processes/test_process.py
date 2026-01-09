@@ -244,6 +244,7 @@ class TestManager:
         self.test_results = {}  # {test_id: result_dict}
         self.device_status = {}  # {device_id: status_dict}
         self.test_tasks = {}  # {test_id: asyncio.Task}
+        self.stop_tasks = set()
         self.calibration_tasks = set()
         
         # 同步执行相关
@@ -389,13 +390,18 @@ class TestManager:
             device_id = message.get("device_id")
             test_id = message.get("test_id")
             request_id = message.get("request_id")
-            
-            result = await self.stop_test(device_id, test_id)
-            
-            # 如果有请求ID，返回结果
-            if request_id:
-                result["request_id"] = request_id
+            async def _run_stop():
+                try:
+                    result = await self.stop_test(device_id, test_id)
+                except Exception as e:
+                    result = {"status": "fail", "reason": str(e)}
+                if request_id:
+                    result["request_id"] = request_id
                 self.qt_result_queue.put(result)
+
+            task = asyncio.create_task(_run_stop())
+            self.stop_tasks.add(task)
+            task.add_done_callback(lambda t: self.stop_tasks.discard(t))
         
         elif message_type == MSG_LIST_DEVICES:
             # 列出可用设备

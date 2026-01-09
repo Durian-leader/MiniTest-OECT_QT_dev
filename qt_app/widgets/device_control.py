@@ -1217,43 +1217,55 @@ class DeviceControlWidget(QWidget):
         """Stop synchronized workflow for all devices"""
         if not self.sync_test_ids:
             # If no sync tests, stop all current tests
+            items = []
+            for port, test_id in list(self.current_test_ids.items()):
+                items.append({
+                    "port": port,
+                    "test_id": test_id
+                })
+
             stopped_count = 0
-            for port in list(self.current_test_ids.keys()):
+            if items:
                 try:
-                    result = self.backend.stop_test(test_id=self.current_test_ids[port])
-                    if result.get("status") == "ok":
-                        # Update plot widget
-                        if port in self.plot_widgets:
-                            self.plot_widgets[port].set_test_completed()
-                        # Remove test ID
-                        del self.current_test_ids[port]
-                        stopped_count += 1
-                except:
+                    results = self.backend.stop_tests(items)
+                    for item, result in results:
+                        port = item.get("port")
+                        if result.get("status") == "ok" and port in self.current_test_ids:
+                            if port in self.plot_widgets:
+                                self.plot_widgets[port].set_test_completed()
+                            del self.current_test_ids[port]
+                            stopped_count += 1
+                except Exception:
                     pass
-            
+
             if stopped_count > 0:
                 QMessageBox.information(self, "Success", f"已停止 {stopped_count} 个设备的测试")
             return
         
         # Stop all synchronized tests
         stopped_count = 0
+        items = []
         for port, test_id in list(self.sync_test_ids.items()):
+            items.append({
+                "port": port,
+                "test_id": test_id
+            })
+
+        if items:
             try:
-                result = self.backend.stop_test(test_id=test_id)
-                if result.get("status") == "ok":
-                    # Update plot widget
-                    if port in self.plot_widgets:
-                        self.plot_widgets[port].set_test_completed()
-                    
-                    # Remove test IDs
-                    if port in self.current_test_ids:
-                        del self.current_test_ids[port]
-                    stopped_count += 1
-            except:
+                results = self.backend.stop_tests(items)
+                for item, result in results:
+                    port = item.get("port")
+                    if result.get("status") == "ok":
+                        if port in self.plot_widgets:
+                            self.plot_widgets[port].set_test_completed()
+                        if port in self.current_test_ids:
+                            del self.current_test_ids[port]
+                        if port in self.sync_test_ids:
+                            del self.sync_test_ids[port]
+                        stopped_count += 1
+            except Exception:
                 pass
-        
-        # Clear sync test IDs
-        self.sync_test_ids.clear()
         
         if stopped_count > 0:
             QMessageBox.information(self, "Success", f"已停止 {stopped_count} 个设备的同步测试")

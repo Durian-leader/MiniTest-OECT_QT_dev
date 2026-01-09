@@ -346,6 +346,51 @@ class MedicalTestBackend:
             "msg": "stop_request_sent",
             "note": "Stop request accepted, but no immediate confirmation"
         }
+
+    def stop_tests(self, items: List[Dict[str, Any]], timeout_per_device: float = 5.0
+                   ) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+        """并行停止多个测试，返回 (item, result) 列表"""
+        if not self.is_running:
+            return [(item, {"status": "fail", "reason": "Backend not running"}) for item in items]
+
+        if not items:
+            return []
+
+        pending: Dict[str, Dict[str, Any]] = {}
+        results: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+
+        for item in items:
+            request_id = str(uuid.uuid4())
+            pending[request_id] = item
+            self.qt_to_test_queue.put({
+                "type": MSG_STOP_TEST,
+                "device_id": item.get("device_id"),
+                "test_id": item.get("test_id"),
+                "request_id": request_id
+            })
+
+        start_time = time.time()
+        timeout = max(timeout_per_device, 1.0)
+
+        while pending and (time.time() - start_time) < timeout:
+            try:
+                response = self.test_to_qt_queue.get(block=True, timeout=0.5)
+            except (mp.queues.Empty, ConnectionError, BrokenPipeError, EOFError):
+                continue
+
+            request_id = response.get("request_id")
+            if not request_id or request_id not in pending:
+                continue
+
+            item = pending.pop(request_id)
+            results.append((item, response))
+
+        if pending:
+            for request_id, item in list(pending.items()):
+                response = {"status": "fail", "reason": "stop_timeout", "request_id": request_id}
+                results.append((item, response))
+
+        return results
     
     def get_test_status(self, test_id: str) -> Dict[str, Any]:
         """
