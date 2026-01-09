@@ -43,6 +43,7 @@ class RealtimePlotWidget(QWidget):
         self.data_y = np.array([])
         self.new_point_buffer_x = []
         self.new_point_buffer_y = []
+        self.last_sample_ts = 0.0
         
         # === 多曲线数据结构（仅用于output）===
         self.output_curves_data = {}  # {curve_name: {'x': [...], 'y': [...]}}
@@ -647,7 +648,11 @@ class RealtimePlotWidget(QWidget):
             if mode in ('transfer', 'transient'):
                 self.new_point_buffer_x.extend([point[0] for point in new_points])
                 self.new_point_buffer_y.extend([point[1] for point in new_points])
-                self._set_debug_message(tr("realtime.added_points", count=len(new_points), mode=mode))
+                if mode == 'transient':
+                    self.last_sample_ts = new_points[-1][0]
+                    self._set_debug_message(f"t={self.last_sample_ts:.3f}s | +{len(new_points)} pts")
+                else:
+                    self._set_debug_message(tr("realtime.added_points", count=len(new_points), mode=mode))
                 return
     
     def process_output_step(self, hex_data):
