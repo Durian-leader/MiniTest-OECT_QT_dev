@@ -846,10 +846,10 @@ class DeviceControlWidget(QWidget):
             
             if result.get("status") == "ok":
                 # Reset data counters
-        self.last_data_time = time.time()
-        self.data_count = 0
-        self._latency_sum = 0.0
-        self._latency_count = 0
+                self.last_data_time = time.time()
+                self.data_count = 0
+                self._latency_sum = 0.0
+                self._latency_count = 0
                 
                 # Store test ID for this device
                 self.current_test_ids[self.selected_port] = test_id
