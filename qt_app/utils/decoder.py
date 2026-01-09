@@ -168,6 +168,13 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
             usable_bytes = total_packets * packet_size
             data = np.frombuffer(byte_data[:usable_bytes], dtype=np.uint8).reshape(total_packets, packet_size)
 
+            # Drop end-sequence fragments that can appear as full packets (e.g. 0xFE x7)
+            end_mask = np.all(data == 0xFE, axis=1) | np.all(data == 0xFF, axis=1)
+            if np.any(end_mask):
+                data = data[~end_mask]
+                if data.size == 0:
+                    return result
+
             ts = (data[:, 0].astype(np.uint32) |
                   (data[:, 1].astype(np.uint32) << 8) |
                   (data[:, 2].astype(np.uint32) << 16) |
