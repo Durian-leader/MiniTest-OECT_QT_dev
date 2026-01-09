@@ -459,10 +459,6 @@ class MedicalTestBackend:
             except (mp.queues.Empty, ConnectionError, BrokenPipeError, EOFError):
                 pass
         return {"status": "fail", "reason": "calibration_timeout"}
-            
-        except Exception as e:
-            logger.error(f"获取测试数据失败: {str(e)}")
-            return {"status": "error", "reason": str(e)}
     
     def list_saved_tests(self, device_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
