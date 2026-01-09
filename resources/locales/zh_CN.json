@@ -22,6 +22,7 @@
         "title": "确认关闭",
         "message": "确定要关闭MiniTest-OECT上位机吗？\n所有正在运行的测试将被停止。"
       },
+      "info": "提示",
       "error": "错误",
       "warning": "Warning",
       "success": "Success"
@@ -317,6 +318,9 @@
         "title": "导出",
         "select_directory": "选择导出目录",
         "completed": "导出完成",
+        "completed_title": "导出完成",
+        "completed_count": "已成功导出 {count} 个测试",
+        "skipped_count": "\n跳过 {count} 个",
         "completed_message": "已成功导出 {count} 个测试到:\n{path}",
         "error": "导出错误",
         "error_message": "导出测试时发生错误:\n{error}",

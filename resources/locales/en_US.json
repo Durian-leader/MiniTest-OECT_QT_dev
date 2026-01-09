@@ -22,6 +22,7 @@
         "title": "Confirm Close",
         "message": "Are you sure you want to close MiniTest-OECT Host PC?\nAll running tests will be stopped."
       },
+      "info": "Info",
       "error": "Error",
       "warning": "Warning",
       "success": "Success"
@@ -317,6 +318,9 @@
         "title": "Export",
         "select_directory": "Select Export Directory",
         "completed": "Export Completed",
+        "completed_title": "Export Completed",
+        "completed_count": "Successfully exported {count} test(s)",
+        "skipped_count": "\nSkipped {count} test(s)",
         "completed_message": "Successfully exported {count} test(s) to:\n{path}",
         "error": "Export Error",
         "error_message": "Error occurred while exporting tests:\n{error}",
