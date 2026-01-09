@@ -1,5 +1,5 @@
 {
-  "serial_read_chunk_size": 4096,
-  "buffer_flush_packet_count": 200,
-  "buffer_flush_interval_sec": 0.2
+  "serial_read_chunk_size": 8192,
+  "buffer_flush_packet_count": 100,
+  "buffer_flush_interval_sec": 0.1
 }
