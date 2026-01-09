@@ -390,14 +390,13 @@ class AsyncSerialDevice:
                         # 处理数据回调
                         if data_callback:
                             if packet_size > 0:
-                                # 按照指定的包大小处理数据
+                                # 按包大小聚合回调，减少每包回调的调度开销
                                 data_buffer.extend(new_data)
-                                
-                                # 处理完整的数据包
-                                while len(data_buffer) >= packet_size:
-                                    packet = data_buffer[:packet_size]
-                                    data_buffer = data_buffer[packet_size:]
-                                    data_callback(bytes(packet), self.device_id)
+                                full_len = (len(data_buffer) // packet_size) * packet_size
+                                if full_len:
+                                    chunk = bytes(data_buffer[:full_len])
+                                    del data_buffer[:full_len]
+                                    data_callback(chunk, self.device_id)
                             else:
                                 # 如果没有指定包大小，按原方式处理
                                 data_callback(new_data, self.device_id)
