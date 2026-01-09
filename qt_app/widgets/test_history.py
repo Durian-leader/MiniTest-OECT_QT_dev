@@ -33,7 +33,7 @@ class DraggableSortBlock(QLabel):
         self.display_name = display_name
         self.is_ascending = True if sort_key != 'time' else False  # 时间默认降序，其他升序
         self.setAcceptDrops(True)
-        self.setMinimumWidth(110)  # 最小宽度以容纳箭头
+        self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.setMaximumHeight(35)  # 最大高度以完整显示文字
         self.setAlignment(Qt.AlignCenter)
         
@@ -47,6 +47,13 @@ class DraggableSortBlock(QLabel):
         """更新显示文本，包含排序方向箭头"""
         arrow = " ↑" if self.is_ascending else " ↓"
         self.setText(self.display_name + arrow)
+        self._update_size_hint()
+
+    def _update_size_hint(self):
+        """根据当前文本更新最小宽度，避免英文被裁剪"""
+        text_width = self.fontMetrics().horizontalAdvance(self.text())
+        # padding(左右20) + 边框余量(8)
+        self.setMinimumWidth(text_width + 28)
     
     def update_style(self):
         """更新样式，升序和降序使用不同颜色"""
@@ -201,9 +208,8 @@ class SortingContainer(QWidget):
         self.layout.setContentsMargins(5, 5, 5, 5)
         self.layout.setSpacing(5)
         
-        # 设置固定的最大宽度，保持紧凑布局
-        self.setMaximumWidth(880)  # 6个块 × 110px + 间距 + 说明文字 ≈ 880px
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        # 允许自适应宽度，避免英文被裁剪
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         
         # 初始化排序块
         self.sort_blocks = {}
@@ -253,6 +259,7 @@ class SortingContainer(QWidget):
                 block.display_name = translations[key]
                 block.update_display_text()
                 block.update_style()
+                block._update_size_hint()
         self.help_label.setText(tr("history.sort.help_text"))
     
     def on_sort_direction_changed(self, sort_key, is_ascending):
