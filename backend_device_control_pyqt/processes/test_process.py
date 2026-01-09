@@ -244,6 +244,7 @@ class TestManager:
         self.test_results = {}  # {test_id: result_dict}
         self.device_status = {}  # {device_id: status_dict}
         self.test_tasks = {}  # {test_id: asyncio.Task}
+        self.calibration_tasks = set()
         
         # 同步执行相关
         self.sync_batches = {}  # {batch_id: {test_id: device_id}}
@@ -433,16 +434,24 @@ class TestManager:
             transimpedance_ohms = message.get("transimpedance_ohms", 100.0)
             transient_packet_size = message.get("transient_packet_size", 7)
             request_id = message.get("request_id")
-            result = await self.calibrate_device(
-                port,
-                baudrate,
-                device_id,
-                transimpedance_ohms=transimpedance_ohms,
-                transient_packet_size=transient_packet_size
-            )
-            if request_id:
-                result["request_id"] = request_id
+            async def _run_calibration():
+                try:
+                    result = await self.calibrate_device(
+                        port,
+                        baudrate,
+                        device_id,
+                        transimpedance_ohms=transimpedance_ohms,
+                        transient_packet_size=transient_packet_size
+                    )
+                except Exception as e:
+                    result = {"status": "fail", "reason": str(e)}
+                if request_id:
+                    result["request_id"] = request_id
                 self.qt_result_queue.put(result)
+
+            task = asyncio.create_task(_run_calibration())
+            self.calibration_tasks.add(task)
+            task.add_done_callback(lambda t: self.calibration_tasks.discard(t))
     
     async def get_or_create_device(self, device_id: str, port: str, baudrate: int) -> Tuple[bool, Optional[AsyncSerialDevice]]:
         """

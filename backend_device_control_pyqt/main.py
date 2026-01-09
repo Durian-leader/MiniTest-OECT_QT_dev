@@ -463,6 +463,67 @@ class MedicalTestBackend:
             except (mp.queues.Empty, ConnectionError, BrokenPipeError, EOFError):
                 pass
         return {"status": "fail", "reason": "calibration_timeout"}
+
+    def calibrate_devices(self, devices: List[Dict[str, Any]],
+                          progress_callback=None,
+                          timeout_per_device: float = 15.0) -> List[Tuple[Dict[str, Any], Dict[str, Any]]]:
+        """并行校零多个设备，返回 (device_data, result) 列表"""
+        if not self.is_running:
+            return [(device, {"status": "fail", "reason": "Backend not running"}) for device in devices]
+
+        total = len(devices)
+        if total == 0:
+            return []
+
+        pending: Dict[str, Dict[str, Any]] = {}
+        results: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
+
+        for device in devices:
+            port = device.get("device")
+            device_id = device.get("device_id") or port
+            request_id = str(uuid.uuid4())
+            pending[request_id] = device
+            self.qt_to_test_queue.put({
+                "type": MSG_CALIBRATE,
+                "device_id": device_id,
+                "port": port,
+                "baudrate": int(device.get("baudrate", 512000)),
+                "transimpedance_ohms": device.get("transimpedance_ohms", 100.0),
+                "transient_packet_size": device.get("transient_packet_size", 7),
+                "request_id": request_id
+            })
+
+        start_time = time.time()
+        timeout = max(timeout_per_device, 1.0) * total
+        completed = 0
+
+        while pending and (time.time() - start_time) < timeout:
+            try:
+                response = self.test_to_qt_queue.get(block=True, timeout=0.5)
+            except (mp.queues.Empty, ConnectionError, BrokenPipeError, EOFError):
+                continue
+
+            request_id = response.get("request_id")
+            if not request_id or request_id not in pending:
+                continue
+
+            device = pending.pop(request_id)
+            results.append((device, response))
+            completed += 1
+            if progress_callback:
+                device_name = device.get("device_id") or device.get("device")
+                progress_callback(completed, total, device_name, response)
+
+        if pending:
+            for request_id, device in list(pending.items()):
+                response = {"status": "fail", "reason": "calibration_timeout", "request_id": request_id}
+                results.append((device, response))
+                completed += 1
+                if progress_callback:
+                    device_name = device.get("device_id") or device.get("device")
+                    progress_callback(completed, total, device_name, response)
+
+        return results
     
     def list_saved_tests(self, device_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """

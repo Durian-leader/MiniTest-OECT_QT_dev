@@ -58,8 +58,19 @@ class CalibrationWorker(QObject):
         self._cancelled = True
 
     def run(self):
-        results = []
         total = len(self.devices)
+        if hasattr(self.backend, "calibrate_devices"):
+            def on_progress(current, total_count, device_id, res):
+                if not self._cancelled:
+                    self.progress.emit(current, total_count, device_id, res)
+
+            results = self.backend.calibrate_devices(self.devices, progress_callback=on_progress)
+            if self._cancelled:
+                return
+            self.finished.emit(results)
+            return
+
+        results = []
         for idx, device_data in enumerate(self.devices, start=1):
             if self._cancelled:
                 break
