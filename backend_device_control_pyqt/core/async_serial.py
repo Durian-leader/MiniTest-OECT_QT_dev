@@ -377,7 +377,8 @@ class AsyncSerialDevice:
                 
                 # 尝试读取数据（带短暂超时）
                 try:
-                    new_data = await asyncio.wait_for(self.reader.read(1024), read_timeout)
+                    # 适当增加单次读取大小，减少回调频次
+                    new_data = await asyncio.wait_for(self.reader.read(4096), read_timeout)
                     
                     if new_data:
                         received_data.extend(new_data)

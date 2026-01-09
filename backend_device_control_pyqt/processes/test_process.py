@@ -1219,10 +1219,10 @@ def initialize_test_step_classes(data_bridge):
             })
             buffer['step_info'] = workflow_info
             
-            # TODO:检查是否需要刷新（90个数据包或100ms超时）
+            # TODO:检查是否需要刷新（更大批量，降低开销）
             should_flush = (
-                len(buffer['data']) >= 90 or
-                time.time() - buffer['last_flush'] >= 0.1
+                len(buffer['data']) >= 200 or
+                time.time() - buffer['last_flush'] >= 0.2
             )
             
             if should_flush:
