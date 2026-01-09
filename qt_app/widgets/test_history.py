@@ -1143,6 +1143,8 @@ class TestHistoryWidget(QWidget):
             step_size = params.get('gateVoltageStep', 0)
             if step_size > 0:
                 num_points = gate_span / step_size + 1
+                if params.get("isSweep") == 1:
+                    num_points *= 2
                 self.add_param_label(tr("history.params.theoretical_points"), f"{int(num_points)}")
         
         elif step_type == "transient":
@@ -1190,6 +1192,8 @@ class TestHistoryWidget(QWidget):
             step_size = params.get('drainVoltageStep', 0)
             if step_size > 0:
                 num_points = drain_span / step_size + 1
+                if params.get("isSweep") == 1:
+                    num_points *= 2
                 self.add_param_label(tr("history.params.points_per_curve"), f"{int(num_points)}")
     
     def add_param_label(self, name, value):
