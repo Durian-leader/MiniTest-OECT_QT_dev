@@ -29,6 +29,7 @@ class RealtimePlotWidget(QWidget):
         self.transient_packet_size = None
         self.path_readable = ""
         self.transimpedance_ohms = 100.0
+        self.baseline_current = 0.0
         
         # 步骤跟踪
         self.current_step_index = -1
@@ -83,6 +84,13 @@ class RealtimePlotWidget(QWidget):
         if value <= 0:
             value = 100.0
         self.transimpedance_ohms = value
+
+    def set_baseline_current(self, value):
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            value = 0.0
+        self.baseline_current = value
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -639,7 +647,8 @@ class RealtimePlotWidget(QWidget):
             byte_data,
             mode,
             transimpedance_ohms=self.transimpedance_ohms,
-            transient_packet_size=self.transient_packet_size if mode == 'transient' else None
+            transient_packet_size=self.transient_packet_size if mode == 'transient' else None,
+            baseline_current=self.baseline_current
         )
 
         # 添加数据点到缓冲区，带数据验证
@@ -723,7 +732,8 @@ class RealtimePlotWidget(QWidget):
         new_points = decode_bytes_to_data(
             byte_data,
             mode='transfer',
-            transimpedance_ohms=self.transimpedance_ohms
+            transimpedance_ohms=self.transimpedance_ohms,
+            baseline_current=self.baseline_current
         )  # output使用transfer格式
 
         if new_points and curve_name in self.output_curves_data:
@@ -805,7 +815,8 @@ class RealtimePlotWidget(QWidget):
         new_points = decode_bytes_to_data(
             byte_data,
             mode='transfer',
-            transimpedance_ohms=self.transimpedance_ohms
+            transimpedance_ohms=self.transimpedance_ohms,
+            baseline_current=self.baseline_current
         )
 
         if new_points:

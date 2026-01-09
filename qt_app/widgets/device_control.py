@@ -4,9 +4,10 @@ import uuid
 import time
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QListWidget, QListWidgetItem, QSplitter, QMessageBox,
-                            QFileDialog, QFrame, QGroupBox, QMenu,
-                            QLineEdit, QFormLayout, QCheckBox, QStyledItemDelegate, QStyle)
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize, QRect
+                            QFileDialog, QFrame, QGroupBox, QMenu, QProgressDialog,
+                            QLineEdit, QFormLayout, QCheckBox, QStyledItemDelegate, QStyle,
+                            QSizePolicy)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize, QRect, QObject, QThread
 from PyQt5.QtGui import QIcon, QColor, QBrush, QFont
 
 from qt_app.widgets.workflow_editor import WorkflowEditorWidget
@@ -40,6 +41,44 @@ def format_transimpedance_info(value):
         ohms=f"{transimpedance_ohms:g}",
         range=f"{range_ma:.4g}"
     )
+
+
+class CalibrationWorker(QObject):
+    progress = pyqtSignal(int, int, str, dict)
+    finished = pyqtSignal(list)
+
+    def __init__(self, backend, devices):
+        super().__init__()
+        self.backend = backend
+        self.devices = devices
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        results = []
+        total = len(self.devices)
+        for idx, device_data in enumerate(self.devices, start=1):
+            if self._cancelled:
+                break
+            port = device_data.get("device")
+            device_id = device_data.get("device_id") or port
+            transimpedance_ohms = normalize_transimpedance(
+                device_data.get("transimpedance_ohms"),
+                DEFAULT_TRANSIMPEDANCE_OHMS
+            )
+            transient_packet_size = device_data.get("transient_packet_size", 7)
+            res = self.backend.calibrate_device(
+                device_id=device_id,
+                port=port,
+                baudrate=int(device_data.get("baudrate", 512000)),
+                transimpedance_ohms=transimpedance_ohms,
+                transient_packet_size=transient_packet_size
+            )
+            results.append((device_data, res))
+            self.progress.emit(idx, total, device_id, res)
+        self.finished.emit(results)
 
 class DeviceItemDelegate(QStyledItemDelegate):
     """Custom delegate for rendering device list items"""
@@ -170,6 +209,10 @@ class DeviceControlWidget(QWidget):
         self._latency_count = 0
         self._points_sum = 0
         self._points_duration = 0.0
+        self.device_baselines = {}
+        self._calibration_thread = None
+        self._calibration_worker = None
+        self._calibration_dialog = None
         
         # Setup UI
         self.setup_ui()
@@ -289,11 +332,12 @@ class DeviceControlWidget(QWidget):
         btn_row = QHBoxLayout()
         self.refresh_btn = QPushButton(tr("device_control.refresh_button"))
         self.refresh_btn.clicked.connect(self.refresh_devices)
-        btn_row.addWidget(self.refresh_btn)
-        self.calibrate_all_btn = QPushButton("Calibrate All")
+        self.refresh_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        btn_row.addWidget(self.refresh_btn, 1)
+        self.calibrate_all_btn = QPushButton(tr("device_control.calibrate_all"))
         self.calibrate_all_btn.clicked.connect(self.calibrate_all_devices)
-        btn_row.addWidget(self.calibrate_all_btn)
-        btn_row.addStretch()
+        self.calibrate_all_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        btn_row.addWidget(self.calibrate_all_btn, 1)
         left_layout.addLayout(btn_row)
         
         # Middle panel - Workflow configuration
@@ -659,50 +703,97 @@ class DeviceControlWidget(QWidget):
             QMessageBox.warning(self, "Error", f"获取设备列表失败: {str(e)}")
 
     def calibrate_all_devices(self):
-        """对所有设备发送校零命令"""
-        results = []
+        """对所有设备执行校零"""
+        devices = []
         for i in range(self.device_list.count()):
             item = self.device_list.item(i)
             if not item:
                 continue
-            device_data = item.data(Qt.UserRole + 1) or {}
-            res = self.calibrate_single_device(device_data, show_message=False)
-            results.append((device_data.get("device_id") or device_data.get("device"), res))
+            device_data = item.data(Qt.UserRole + 1)
+            if isinstance(device_data, dict):
+                devices.append(device_data)
 
-        success = [r for r in results if r[1] and r[1].get("status") == "ok"]
-        failed = [r for r in results if not r[1] or r[1].get("status") != "ok"]
+        self.start_calibration(devices, show_summary=True)
 
-        msg = f"校零完成: {len(success)}/{len(results)} 成功"
-        if success:
-            msg += "\n成功基线: " + "; ".join([f"{name}:{r[1].get('baseline', 0)}" for name, r in success])
-        if failed:
-            msg += "\n失败: " + "; ".join([f"{name}:{(r[1] or {}).get('reason','unknown')}" for name, r in failed])
-        QMessageBox.information(self, tr("main.dialog.info"), msg)
     def force_refresh_devices(self):
         """强制重新扫描设备硬件（原刷新按钮的行为）"""
         self.last_device_scan = 0  # 强制重新扫描
         self.refresh_devices()
 
+    def start_calibration(self, devices, show_summary: bool = True):
+        if not devices:
+            QMessageBox.information(self, tr("main.dialog.info"), "没有可校零的设备")
+            return
+        if self._calibration_thread and self._calibration_thread.isRunning():
+            QMessageBox.warning(self, tr("main.dialog.warning"), "校零正在进行中")
+            return
+
+        total = len(devices)
+        dialog = QProgressDialog("Calibrating devices...", "Cancel", 0, total, self)
+        dialog.setWindowModality(Qt.WindowModal)
+        dialog.setMinimumDuration(0)
+        dialog.setValue(0)
+        dialog.show()
+
+        worker = CalibrationWorker(self.backend, devices)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+
+        def on_progress(current, total_count, device_id, res):
+            dialog.setValue(current)
+            dialog.setLabelText(f"{device_id} ({current}/{total_count})")
+
+        def on_finished(results):
+            dialog.close()
+            self._calibration_thread = None
+            self._calibration_worker = None
+            self._calibration_dialog = None
+
+            success = []
+            failed = []
+            for device_data, res in results:
+                port = device_data.get("device")
+                device_id = device_data.get("device_id") or port
+                if res and res.get("status") == "ok":
+                    baseline = res.get("baseline", 0.0)
+                    self.device_baselines[port] = baseline
+                    if port in self.plot_widgets:
+                        self.plot_widgets[port].set_baseline_current(baseline)
+                    success.append((device_id, baseline))
+                else:
+                    failed.append((device_id, (res or {}).get("reason", "unknown")))
+
+            if show_summary:
+                msg = f"校零完成: {len(success)}/{len(results)} 成功"
+                if success:
+                    msg += "\n成功基线: " + "; ".join([f"{name}:{val:.3e}" for name, val in success])
+                if failed:
+                    msg += "\n失败: " + "; ".join([f"{name}:{reason}" for name, reason in failed])
+                QMessageBox.information(self, tr("main.dialog.info"), msg)
+
+        def on_canceled():
+            worker.cancel()
+
+        worker.progress.connect(on_progress)
+        worker.finished.connect(on_finished)
+        dialog.canceled.connect(on_canceled)
+        thread.started.connect(worker.run)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+
+        self._calibration_thread = thread
+        self._calibration_worker = worker
+        self._calibration_dialog = dialog
+        thread.start()
+
     def calibrate_single_device(self, device_data: dict, show_message: bool = True):
         """对单个设备校零"""
-        if not device_data:
+        if not isinstance(device_data, dict):
             if show_message:
                 QMessageBox.warning(self, tr("main.dialog.warning"), "无效的设备信息")
-            return None
-        port = device_data.get("device")
-        device_id = device_data.get("device_id") or port
-        baudrate = int(device_data.get("baudrate", 512000))
-        try:
-            res = self.backend.calibrate_device(device_id=device_id, port=port, baudrate=baudrate)
-        except Exception as e:
-            res = {"status": "fail", "reason": str(e)}
-
-        if show_message:
-            if res.get("status") == "ok":
-                QMessageBox.information(self, tr("main.dialog.success"), f"{device_id} 校零完成，基线={res.get('baseline', 0)}")
-            else:
-                QMessageBox.warning(self, tr("main.dialog.warning"), f"{device_id} 校零失败: {res.get('reason', 'unknown')}")
-        return res
+            return
+        self.start_calibration([device_data], show_summary=show_message)
 
     def show_device_context_menu(self, pos):
         item = self.device_list.itemAt(pos)
@@ -710,7 +801,7 @@ class DeviceControlWidget(QWidget):
             return
         device_data = item.data(Qt.UserRole + 1)
         menu = QMenu(self)
-        calibrate_action = menu.addAction("Calibrate")
+        calibrate_action = menu.addAction(tr("device_control.calibrate_action"))
         action = menu.exec_(self.device_list.mapToGlobal(pos))
         if action == calibrate_action:
             self.calibrate_single_device(device_data, show_message=True)
@@ -888,6 +979,7 @@ class DeviceControlWidget(QWidget):
             device_info.get('transimpedance_ohms'),
             self.default_transimpedance_ohms
         )
+        baseline_current = self.device_baselines.get(self.selected_port, 0.0)
         
         # Prepare workflow parameters
         device_id = device_info['device_id'] or self.selected_port
@@ -903,6 +995,7 @@ class DeviceControlWidget(QWidget):
             "steps": steps,
             "transimpedance_ohms": transimpedance_ohms,
             "transient_packet_size": device_info.get("transient_packet_size", 7),
+            "baseline_current": baseline_current,
         }
         
         try:
@@ -923,11 +1016,13 @@ class DeviceControlWidget(QWidget):
                 if self.selected_port not in self.plot_widgets:
                     plot_widget = RealtimePlotWidget(self.selected_port, test_id)
                     plot_widget.set_transimpedance_ohms(transimpedance_ohms)
+                    plot_widget.set_baseline_current(baseline_current)
                     self.plot_widgets[self.selected_port] = plot_widget
                     self.plot_layout.addWidget(plot_widget)
                 else:
                     self.plot_widgets[self.selected_port].set_test_id(test_id)
                     self.plot_widgets[self.selected_port].set_transimpedance_ohms(transimpedance_ohms)
+                    self.plot_widgets[self.selected_port].set_baseline_current(baseline_current)
                 
                 # Update plot visibility
                 self.update_plot_visibility()
@@ -1036,6 +1131,7 @@ class DeviceControlWidget(QWidget):
                 device_info.get('transimpedance_ohms'),
                 self.default_transimpedance_ohms
             )
+            baseline_current = self.device_baselines.get(port, 0.0)
             
             # Prepare workflow parameters with sync flag
             params = {
@@ -1050,6 +1146,7 @@ class DeviceControlWidget(QWidget):
                 "steps": steps,
                 "transimpedance_ohms": transimpedance_ohms,
                 "transient_packet_size": device_info.get("transient_packet_size", 7),
+                "baseline_current": baseline_current,
                 "sync_mode": True,  # Add sync mode flag
                 "batch_id": batch_id  # Add batch ID for synchronization
             }
@@ -1067,11 +1164,13 @@ class DeviceControlWidget(QWidget):
                     if port not in self.plot_widgets:
                         plot_widget = RealtimePlotWidget(port, test_id)
                         plot_widget.set_transimpedance_ohms(transimpedance_ohms)
+                        plot_widget.set_baseline_current(baseline_current)
                         self.plot_widgets[port] = plot_widget
                         self.plot_layout.addWidget(plot_widget)
                     else:
                         self.plot_widgets[port].set_test_id(test_id)
                         self.plot_widgets[port].set_transimpedance_ohms(transimpedance_ohms)
+                        self.plot_widgets[port].set_baseline_current(baseline_current)
                     
                     success_count += 1
                 else:
@@ -1506,7 +1605,7 @@ class DeviceControlWidget(QWidget):
 
         # Update buttons
         self.refresh_btn.setText(tr("device_control.refresh_button"))
-        self.calibrate_all_btn.setText("Calibrate All")
+        self.calibrate_all_btn.setText(tr("device_control.calibrate_all"))
         self.start_btn.setText(tr("device_control.start_test"))
         self.stop_btn.setText(tr("device_control.stop_test"))
         self.export_btn.setText(tr("device_control.export_workflow"))

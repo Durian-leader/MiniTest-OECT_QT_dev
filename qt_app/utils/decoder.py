@@ -10,7 +10,6 @@ import numpy as np
 
 ########################### 日志设置 ###################################
 from logger_config import get_module_logger
-from app_config import get_bias_current, get_bias_reference_transimpedance
 logger = get_module_logger() 
 #####################################################################
 
@@ -109,7 +108,8 @@ def decode_hex_to_bytes(hex_string):
         traceback.print_exc()
         return b''
 
-def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, transient_packet_size: int = None):
+def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, transient_packet_size: int = None,
+                         baseline_current: float = 0.0):
     """
     Decode bytes to data points - *** 改进output支持 ***
     
@@ -143,9 +143,10 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
     else:
         packet_size = 5
     
-    # Define bias current correction
-    # bias_current is calibrated at reference transimpedance, scale for other values
-    bias_current = 0.0
+    try:
+        baseline_current = float(baseline_current)
+    except (TypeError, ValueError):
+        baseline_current = 0.0
     
     # Initialize result list
     result = []
@@ -184,7 +185,7 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
                                -(raw_neg.astype(np.float64) / 8388608.0) * 2.048,
                                (raw.astype(np.float64) / 8388607.0) * 2.048)
 
-            current_value = -voltage / transimpedance_ohms - bias_current
+            current_value = -voltage / transimpedance_ohms - baseline_current
             result = np.column_stack((ts.astype(np.float64) / 1000.0, current_value)).tolist()
             logger.debug(f"解码完成: 生成了 {len(result)} 个数据点")
             return result
@@ -217,7 +218,7 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
                         current_end = i + 7
                     # Current (3 bytes)
                     current_raw = int.from_bytes(b'\x00' + byte_data[current_start:current_end], byteorder='big')
-                    current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - bias_current
+                    current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - baseline_current
 
                     # Add data point - convert ms to seconds for time
                     result.append([ts / 1000.0, current_value])
@@ -236,7 +237,7 @@ def decode_bytes_to_data(byte_data, mode='transfer', transimpedance_ohms=100.0, 
 
                     # Current (3 bytes)
                     current_raw = int.from_bytes(b'\x00' + byte_data[i+2:i+5], byteorder='big')
-                    current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - bias_current
+                    current_value = -ads_cal_voltage(current_raw) / transimpedance_ohms - baseline_current
 
                     # *** 数据验证：过滤异常值 ***
                     # 电压合理范围：-5V 到 +5V（根据实际应用调整）

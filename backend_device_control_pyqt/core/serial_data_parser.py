@@ -5,7 +5,6 @@ import struct
 from logger_config import get_module_logger
 logger = get_module_logger() 
 #####################################################################
-from app_config import get_bias_current, get_bias_reference_transimpedance
 
 def ADS_CalVoltage(data):
     """将 24-bit 原始 ADC 数据转换为电压值"""
@@ -16,7 +15,8 @@ def ADS_CalVoltage(data):
         voltage = (data / 8388607.0) * 2.048
     return voltage
 
-def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, transient_packet_size: int = 7):
+def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, transient_packet_size: int = 7,
+                   baseline_current: float = 0.0):
     """Convert byte data to a numpy array."""
     end_sequences = [
         b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',
@@ -36,7 +36,10 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, trans
     if transimpedance_ohms <= 0:
         transimpedance_ohms = 100.0
 
-    bias_current = 0.0
+    try:
+        baseline_current = float(baseline_current)
+    except (TypeError, ValueError):
+        baseline_current = 0.0
 
     if mode == 'transient':
         try:
@@ -81,7 +84,7 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, trans
             current_raw = int.from_bytes(b'\x00' + current_bytes, byteorder='big')
             current_value = - ADS_CalVoltage(current_raw) / transimpedance_ohms
             result[i, 0] = timestamp / 1000
-            result[i, 1] = current_value - bias_current
+            result[i, 1] = current_value - baseline_current
             if gate_voltage is not None and num_columns > 2:
                 result[i, 2] = gate_voltage
         else:
@@ -92,7 +95,7 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, trans
             current_raw = int.from_bytes(b'\x00' + current_bytes, byteorder='big')
             current_value = - ADS_CalVoltage(current_raw) / transimpedance_ohms
             result[i, 0] = voltage / 1000
-            result[i, 1] = current_value - bias_current
+            result[i, 1] = current_value - baseline_current
 
     return result
 

@@ -27,6 +27,10 @@ class OutputStep(TestStep):
         super().__init__(device, step_id, params, workflow_progress_info)
         self.command_id = command_id
         self.transimpedance_ohms = params.get("transimpedance_ohms", 100.0)
+        try:
+            self.baseline_current = float(params.get("baseline_current", 0.0))
+        except (TypeError, ValueError):
+            self.baseline_current = 0.0
         
         # 解析栅极电压列表
         gate_voltage_list = params.get("gateVoltageList", [0])
@@ -253,7 +257,8 @@ class OutputStep(TestStep):
                     data_array = bytes_to_numpy(
                         raw_data,
                         mode='transfer',
-                        transimpedance_ohms=self.transimpedance_ohms
+                        transimpedance_ohms=self.transimpedance_ohms,
+                        baseline_current=self.baseline_current
                     )
                     if len(data_array) > 0:
                         parsed_data[vg] = data_array

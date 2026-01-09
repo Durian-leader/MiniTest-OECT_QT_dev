@@ -171,6 +171,7 @@ class DataSaveManager:
                 test_id = task.get("test_id", "unknown")
                 transimpedance_ohms = task.get("transimpedance_ohms", 100.0)
                 transient_packet_size = task.get("transient_packet_size", 7)
+                baseline_current = task.get("baseline_current", 0.0)
                 
                 # 如果没有提供文件路径，但有必要的参数，生成一个
                 if not file_path and test_id and mode:
@@ -201,7 +202,8 @@ class DataSaveManager:
                     mode,
                     is_append,
                     transimpedance_ohms=transimpedance_ohms,
-                    transient_packet_size=transient_packet_size
+                    transient_packet_size=transient_packet_size,
+                    baseline_current=baseline_current
                 )
                 
                 # 发送结果
@@ -267,7 +269,8 @@ class DataSaveManager:
         mode: str,
         append: bool = False,
         transimpedance_ohms: float = 100.0,
-        transient_packet_size: int = 7
+        transient_packet_size: int = 7,
+        baseline_current: float = 0.0
     ) -> Tuple[bool, int, Optional[str]]:
         """
         保存文件
@@ -296,7 +299,8 @@ class DataSaveManager:
                             content,
                             mode=mode,
                             transimpedance_ohms=transimpedance_ohms,
-                            transient_packet_size=transient_packet_size
+                            transient_packet_size=transient_packet_size,
+                            baseline_current=baseline_current
                         )
                         
                         # 获取缓存数据
@@ -322,7 +326,8 @@ class DataSaveManager:
                     transfer_data_np = bytes_to_numpy(
                         content,
                         mode=mode,
-                        transimpedance_ohms=transimpedance_ohms
+                        transimpedance_ohms=transimpedance_ohms,
+                        baseline_current=baseline_current
                     )
                     
                     # 写入文件
@@ -364,7 +369,8 @@ class DataSaveManager:
                         new_data_np = bytes_to_numpy(
                             content,
                             mode=mode,
-                            transimpedance_ohms=transimpedance_ohms
+                            transimpedance_ohms=transimpedance_ohms,
+                            baseline_current=baseline_current
                         )
                         
                         # 获取缓存数据
@@ -391,7 +397,8 @@ class DataSaveManager:
                         content,
                         mode=mode,
                         transimpedance_ohms=transimpedance_ohms,
-                        transient_packet_size=transient_packet_size
+                        transient_packet_size=transient_packet_size,
+                        baseline_current=baseline_current
                     )
                     
                     # 写入文件

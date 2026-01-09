@@ -435,7 +435,9 @@ class MedicalTestBackend:
         except Exception as e:
             return {"status": "error", "reason": str(e)}
 
-    def calibrate_device(self, device_id: str, port: str, baudrate: int = 512000) -> Dict[str, Any]:
+    def calibrate_device(self, device_id: str, port: str, baudrate: int = 512000,
+                         transimpedance_ohms: float = 100.0,
+                         transient_packet_size: int = 7) -> Dict[str, Any]:
         """对单个设备发起校零命令"""
         if not self.is_running:
             return {"status": "fail", "reason": "Backend not running"}
@@ -446,6 +448,8 @@ class MedicalTestBackend:
             "device_id": device_id,
             "port": port,
             "baudrate": baudrate,
+            "transimpedance_ohms": transimpedance_ohms,
+            "transient_packet_size": transient_packet_size,
             "request_id": request_id
         })
 

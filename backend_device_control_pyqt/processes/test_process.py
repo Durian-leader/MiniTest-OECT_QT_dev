@@ -14,6 +14,7 @@ import signal
 import sys
 import asyncio
 import re
+import numpy as np
 from typing import Dict, List, Any, Optional, Set, Tuple
 import serial.tools.list_ports
 import serial_asyncio
@@ -27,6 +28,7 @@ logger = get_module_logger()
 # 导入测试相关模块
 from backend_device_control_pyqt.core.command_gen import gen_transfer_cmd, gen_transient_cmd
 from backend_device_control_pyqt.core.async_serial import AsyncSerialDevice
+from backend_device_control_pyqt.core.serial_data_parser import bytes_to_numpy
 from backend_device_control_pyqt.test.test import Test
 from backend_device_control_pyqt.test.transfer_step import TransferStep
 from backend_device_control_pyqt.test.transient_step import TransientStep
@@ -229,6 +231,7 @@ class TestManager:
         self.active_devices = {}  # {device_id: AsyncSerialDevice}
         self.active_tests = {}    # {test_id: Test}
         self.test_to_device = {}  # {test_id: device_id}
+        self.device_baselines = {}  # {device_id or port: baseline_current}
         
         # 测试数据缓存 - 新增：为每个测试收集完整数据，测试完成后再保存
         self.test_data_cache = {}  # {test_id: {step_index: raw_data}}
@@ -427,8 +430,16 @@ class TestManager:
             port = message.get("port")
             device_id = message.get("device_id")
             baudrate = message.get("baudrate", 512000)
+            transimpedance_ohms = message.get("transimpedance_ohms", 100.0)
+            transient_packet_size = message.get("transient_packet_size", 7)
             request_id = message.get("request_id")
-            result = await self.calibrate_device(port, baudrate, device_id)
+            result = await self.calibrate_device(
+                port,
+                baudrate,
+                device_id,
+                transimpedance_ohms=transimpedance_ohms,
+                transient_packet_size=transient_packet_size
+            )
             if request_id:
                 result["request_id"] = request_id
                 self.qt_result_queue.put(result)
@@ -517,6 +528,8 @@ class TestManager:
         baudrate = params.get("baudrate")
         test_id = params.get("test_id")
         transimpedance_ohms = params.get("transimpedance_ohms", 100.0)
+        baseline_current = params.get("baseline_current", self.device_baselines.get(device_id, 0.0))
+        baseline_current = params.get("baseline_current", self.device_baselines.get(device_id, 0.0))
         transient_packet_size = params.get("transient_packet_size", 7)
         try:
             transient_packet_size = int(transient_packet_size)
@@ -579,7 +592,8 @@ class TestManager:
                 "sync_mode": sync_mode,
                 "batch_id": batch_id,
                 "transimpedance_ohms": transimpedance_ohms,
-                "transient_packet_size": transient_packet_size
+                "transient_packet_size": transient_packet_size,
+                "baseline_current": baseline_current
             }
         )
         
@@ -622,6 +636,7 @@ class TestManager:
         if current_path is None:
             current_path = []
         transimpedance_ohms = test.metadata.get("transimpedance_ohms", 100.0)
+        baseline_current = test.metadata.get("baseline_current", 0.0)
         transient_packet_size = test.metadata.get("transient_packet_size", 7)
         try:
             transient_packet_size = int(transient_packet_size)
@@ -693,6 +708,7 @@ class TestManager:
                 # 创建输出特性测试步骤
                 step_params = dict(step_config.get("params", {}))
                 step_params["transimpedance_ohms"] = transimpedance_ohms
+                step_params["baseline_current"] = baseline_current
                 step = OutputStep(
                     device=device,
                     step_id=test_id,
@@ -909,9 +925,11 @@ class TestManager:
 
         return {"status": "ok", "msg": "stopped"}
 
-    async def calibrate_device(self, port: str, baudrate: int, device_id: Optional[str] = None) -> Dict[str, Any]:
+    async def calibrate_device(self, port: str, baudrate: int, device_id: Optional[str] = None,
+                               transimpedance_ohms: float = 100.0,
+                               transient_packet_size: int = 7) -> Dict[str, Any]:
         """
-        发送校零命令 (0x06) 并等待基线返回
+        通过Transient测量获取基线并返回
         """
         if not port:
             return {"status": "fail", "reason": "no_port"}
@@ -930,13 +948,49 @@ class TestManager:
             return {"status": "fail", "reason": "device_busy"}
 
         try:
-            async with device._lock:
-                frame = bytes.fromhex("FF0600FE")
-                device.writer.write(frame)
-                await device.writer.drain()
-                raw = await asyncio.wait_for(device.reader.readexactly(4), timeout=12.0)
-                baseline = int.from_bytes(raw, byteorder="little", signed=True)
-                return {"status": "ok", "baseline": baseline}
+            try:
+                transient_packet_size = int(transient_packet_size)
+            except (TypeError, ValueError):
+                transient_packet_size = 7
+            if transient_packet_size not in (7, 9):
+                transient_packet_size = 7
+
+            cmd_params = {
+                "timeStep": 1,
+                "sourceVoltage": 0,
+                "drainVoltage": 0,
+                "bottomTime": 2500,
+                "topTime": 2500,
+                "gateVoltageBottom": 0,
+                "gateVoltageTop": 0,
+                "cycles": 1
+            }
+            cmd_list = gen_transient_cmd(cmd_params)
+            cmd_hex = bytes(cmd_list).hex().upper()
+
+            data_result, reason = await device.send_and_receive_command(
+                command=cmd_hex,
+                end_sequences={"transient": "FEFEFEFEFEFEFEFE"},
+                timeout=10,
+                packet_size=transient_packet_size
+            )
+            if not data_result:
+                return {"status": "fail", "reason": reason or "no_data"}
+
+            data_np = bytes_to_numpy(
+                data_result,
+                mode="transient",
+                transimpedance_ohms=transimpedance_ohms,
+                transient_packet_size=transient_packet_size,
+                baseline_current=0.0
+            )
+            if data_np.size == 0:
+                baseline = 0.0
+            else:
+                baseline = float(np.mean(data_np[:, 1]))
+
+            self.device_baselines[dev_key] = baseline
+            return {"status": "ok", "baseline": baseline}
         except asyncio.TimeoutError:
             return {"status": "fail", "reason": "timeout"}
         except Exception as e:
@@ -953,6 +1007,7 @@ class TestManager:
         test_id = test.test_id
         device_id = test.device_id
         transimpedance_ohms = test.metadata.get("transimpedance_ohms", 100.0)
+        baseline_current = test.metadata.get("baseline_current", 0.0)
         
         # 如果是同步模式，设置同步回调
         if test.sync_mode:
@@ -993,7 +1048,8 @@ class TestManager:
                     "content": content,
                     "mode": mode,
                     "test_id": test_id,
-                    "transimpedance_ohms": transimpedance_ohms
+                    "transimpedance_ohms": transimpedance_ohms,
+                    "baseline_current": baseline_current
                 }
                 if mode == "transient":
                     transient_packet_size = kwargs.get("transient_packet_size")
@@ -1192,7 +1248,8 @@ class TestManager:
             description=params.get("description", ""),
             metadata={
                 "raw_params": params,
-                "transimpedance_ohms": transimpedance_ohms
+                "transimpedance_ohms": transimpedance_ohms,
+                "baseline_current": baseline_current
             }
         )
         
@@ -1202,6 +1259,7 @@ class TestManager:
         # 创建输出特性测试步骤
         step_params = dict(params.get("step_params", params))
         step_params["transimpedance_ohms"] = transimpedance_ohms
+        step_params["baseline_current"] = baseline_current
         step = OutputStep(
             device=device,
             step_id=test_id,
