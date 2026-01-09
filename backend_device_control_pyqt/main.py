@@ -431,8 +431,9 @@ class MedicalTestBackend:
                         })
                     except:
                         pass
-            
-        return result
+            return result
+        except Exception as e:
+            return {"status": "error", "reason": str(e)}
 
     def calibrate_device(self, device_id: str, port: str, baudrate: int = 512000) -> Dict[str, Any]:
         """对单个设备发起校零命令"""
