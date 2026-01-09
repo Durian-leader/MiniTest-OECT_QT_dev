@@ -6,6 +6,8 @@ import os
 from typing import Dict, Optional, Callable, Tuple, Any, Union, List
 import time
 
+from app_config import get_serial_read_chunk_size
+
 # 添加停止命令常量
 STOP_COMMAND = "FF030100FE"
 ########################### 日志设置 ###################################
@@ -116,6 +118,7 @@ class AsyncSerialDevice:
         self.is_busy = False
         self._lock = asyncio.Lock()
         self._stop_event = asyncio.Event()
+        self.read_chunk_size = max(256, int(get_serial_read_chunk_size()))
         
         # 处理串口设置
         if port is None and auto_discover:
@@ -377,8 +380,8 @@ class AsyncSerialDevice:
                 
                 # 尝试读取数据（带短暂超时）
                 try:
-                    # 适当增加单次读取大小，减少回调频次
-                    new_data = await asyncio.wait_for(self.reader.read(4096), read_timeout)
+                    # 适当增加单次读取大小，减少回调频次（可配置）
+                    new_data = await asyncio.wait_for(self.reader.read(self.read_chunk_size), read_timeout)
                     
                     if new_data:
                         received_data.extend(new_data)

@@ -1185,6 +1185,10 @@ def initialize_test_step_classes(data_bridge):
     from backend_device_control_pyqt.test.step import TestStep
     import time
     from collections import defaultdict, deque
+    from app_config import (
+        get_buffer_flush_packet_count,
+        get_buffer_flush_interval_sec,
+    )
     
     # 步骤感知的数据缓冲器
     class StepAwareDataBuffer:
@@ -1219,10 +1223,11 @@ def initialize_test_step_classes(data_bridge):
             })
             buffer['step_info'] = workflow_info
             
-            # TODO:检查是否需要刷新（更大批量，降低开销）
+            flush_count = max(10, int(get_buffer_flush_packet_count()))
+            flush_interval = max(0.05, float(get_buffer_flush_interval_sec()))
             should_flush = (
-                len(buffer['data']) >= 200 or
-                time.time() - buffer['last_flush'] >= 0.2
+                len(buffer['data']) >= flush_count or
+                time.time() - buffer['last_flush'] >= flush_interval
             )
             
             if should_flush:
