@@ -166,6 +166,8 @@ class DeviceControlWidget(QWidget):
         # Data handling
         self.last_data_time = 0
         self.data_count = 0
+        self._latency_sum = 0.0
+        self._latency_count = 0
         
         # Setup UI
         self.setup_ui()
