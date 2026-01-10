@@ -5,6 +5,7 @@
     "status_ready": "就绪",
     "tab_device_control": "设备控制",
     "tab_test_history": "历史测试查看",
+    "tab_overview": "实时总览",
     "menu": {
       "about": "关于",
       "help": "帮助"
@@ -38,6 +39,16 @@
   "common": {
     "yes": "是",
     "no": "否"
+  },
+  "overview": {
+    "title": "所有设备实时总览",
+    "subtitle": "无需切换设备，集中查看所有设备的实时波形",
+    "empty": "暂无设备在测试",
+    "card_title": "设备 {device} ({port})",
+    "card_test_line": "{name} (ID: {test_id}) · {status}",
+    "card_running": "采集中",
+    "card_completed": "已完成",
+    "no_name": "未命名"
   },
   "device_control": {
     "device_panel": "设备看板",

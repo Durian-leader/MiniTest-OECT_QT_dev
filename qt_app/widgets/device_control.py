@@ -3,6 +3,7 @@ import json
 import uuid
 import time
 import copy
+import logging
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                             QListWidget, QListWidgetItem, QSplitter, QMessageBox,
                             QFileDialog, QFrame, QGroupBox, QMenu, QProgressDialog,
@@ -193,6 +194,11 @@ class DeviceControlWidget(QWidget):
     """
     Widget for device control including device list, workflow configuration, and real-time plotting
     """
+
+    # Signals for sharing real-time data and lifecycle events with other tabs
+    real_time_data = pyqtSignal(str, dict)
+    test_started = pyqtSignal(str, str, dict)
+    test_completed = pyqtSignal(str, str)
     
     def __init__(self, backend):
         super().__init__()
@@ -926,6 +932,28 @@ class DeviceControlWidget(QWidget):
             # Show placeholder if no plot for this device
             self.plot_layout.addWidget(self.placeholder_label)
             self.placeholder_label.setVisible(True)
+
+    def _emit_test_started(self, port, test_id, device_info, test_name, test_description, transimpedance_ohms, baseline_current):
+        """
+        Emit test_started with enriched metadata for other tabs.
+        """
+        metadata = {
+            "device_id": device_info.get("device_id") if device_info else "",
+            "description": device_info.get("description") if device_info else "",
+            "port": port,
+            "test_id": test_id,
+            "test_name": test_name,
+            "test_description": test_description,
+            "transimpedance_ohms": transimpedance_ohms,
+            "baseline_current": baseline_current,
+        }
+        self.test_started.emit(port, test_id, metadata)
+
+    def _emit_test_completed(self, port, test_id):
+        """
+        Emit test_completed to notify listeners a run ended.
+        """
+        self.test_completed.emit(port, test_id)
     
     def start_workflow(self):
         """Start workflow for the selected device"""
@@ -1072,6 +1100,17 @@ class DeviceControlWidget(QWidget):
                 
                 # Update plot visibility
                 self.update_plot_visibility()
+
+                # Broadcast to listeners for overview tab
+                self._emit_test_started(
+                    self.selected_port,
+                    test_id,
+                    device_info,
+                    test_name,
+                    test_description,
+                    transimpedance_ohms,
+                    baseline_current
+                )
                 
                 # Update device info to show test ID
                 if device_info:
@@ -1217,6 +1256,17 @@ class DeviceControlWidget(QWidget):
                         self.plot_widgets[port].set_test_id(test_id)
                         self.plot_widgets[port].set_transimpedance_ohms(transimpedance_ohms)
                         self.plot_widgets[port].set_baseline_current(baseline_current)
+
+                    # Broadcast per-device start for overview tab
+                    self._emit_test_started(
+                        port,
+                        test_id,
+                        device_info,
+                        test_name,
+                        test_description,
+                        transimpedance_ohms,
+                        baseline_current
+                    )
                     
                     success_count += 1
                 else:
@@ -1312,8 +1362,9 @@ class DeviceControlWidget(QWidget):
             return
         
         try:
+            active_test_id = self.current_test_ids[self.selected_port]
             # Stop test
-            result = self.backend.stop_test(test_id=self.current_test_ids[self.selected_port])
+            result = self.backend.stop_test(test_id=active_test_id)
             
             if result.get("status") == "ok":
                 # Update test status in plot widget
@@ -1322,6 +1373,9 @@ class DeviceControlWidget(QWidget):
                 
                 # Remove test ID
                 del self.current_test_ids[self.selected_port]
+
+                # Broadcast completion
+                self._emit_test_completed(self.selected_port, active_test_id)
                 
                 # Update device list
                 # self.force_refresh_devices()
@@ -1458,6 +1512,12 @@ class DeviceControlWidget(QWidget):
                     break
             
             # 如果找到设备且有活跃的图表
+            if device_port:
+                try:
+                    self.real_time_data.emit(device_port, data.copy())
+                except Exception:
+                    pass
+
             if device_port and device_port in self.plot_widgets:
                 plot_widget = self.plot_widgets[device_port]
                 plot_widget.process_message(data)
@@ -1570,6 +1630,9 @@ class DeviceControlWidget(QWidget):
             
             # *** 关键：从活跃测试列表中移除 ***
             del self.current_test_ids[device_port]
+
+            # Broadcast completion
+            self._emit_test_completed(device_port, test_id)
             
             # 更新设备信息显示
             if device_port == self.selected_port:
@@ -1610,6 +1673,9 @@ class DeviceControlWidget(QWidget):
             
             # *** 关键：从活跃测试列表中移除 ***
             del self.current_test_ids[device_port]
+
+            # Broadcast completion to listeners
+            self._emit_test_completed(device_port, test_id)
             
             # 更新设备信息显示
             if device_port == self.selected_port:

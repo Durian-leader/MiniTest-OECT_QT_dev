@@ -10,6 +10,7 @@ from PyQt5.QtGui import QIcon, QFont, QDesktopServices
 # Import our custom widgets
 from qt_app.widgets.device_control import DeviceControlWidget
 from qt_app.widgets.test_history import TestHistoryWidget
+from qt_app.widgets.overview_realtime import OverviewRealtimeWidget
 from backend_device_control_pyqt.main import MedicalTestBackend
 
 # Import translation support
@@ -68,9 +69,16 @@ class MainWindow(QMainWindow):
         # Create tabs
         self.device_control = DeviceControlWidget(self.backend)
         self.test_history = TestHistoryWidget(self.backend)
+        self.overview = OverviewRealtimeWidget()
 
         self.tab_widget.addTab(self.device_control, tr("main.tab_device_control"))
         self.tab_widget.addTab(self.test_history, tr("main.tab_test_history"))
+        self.tab_widget.addTab(self.overview, tr("main.tab_overview"))
+
+        # Wire real-time data to overview tab
+        self.device_control.real_time_data.connect(self.overview.handle_real_time_data)
+        self.device_control.test_started.connect(self.overview.handle_test_started)
+        self.device_control.test_completed.connect(self.overview.handle_test_completed)
 
         # Connect tab change signal
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
@@ -173,6 +181,7 @@ class MainWindow(QMainWindow):
         # Update tab titles
         self.tab_widget.setTabText(0, tr("main.tab_device_control"))
         self.tab_widget.setTabText(1, tr("main.tab_test_history"))
+        self.tab_widget.setTabText(2, tr("main.tab_overview"))
 
         # Update status bar
         self.status_bar.showMessage(tr("main.status_ready"))
@@ -192,6 +201,7 @@ class MainWindow(QMainWindow):
         # Notify child widgets to update their translations
         self.device_control.update_translations()
         self.test_history.update_translations()
+        self.overview.update_translations()
 
     def closeEvent(self, event):
         """Handle window close event"""

@@ -5,6 +5,7 @@
     "status_ready": "Ready",
     "tab_device_control": "Device Control",
     "tab_test_history": "Test History",
+    "tab_overview": "Live Overview",
     "menu": {
       "about": "About",
       "help": "Help"
@@ -38,6 +39,16 @@
   "common": {
     "yes": "Yes",
     "no": "No"
+  },
+  "overview": {
+    "title": "All Devices Live Overview",
+    "subtitle": "Watch every device's waveform without switching tabs",
+    "empty": "No active devices yet",
+    "card_title": "Device {device} ({port})",
+    "card_test_line": "{name} (ID: {test_id}) · {status}",
+    "card_running": "Collecting",
+    "card_completed": "Completed",
+    "no_name": "Untitled"
   },
   "device_control": {
     "device_panel": "Device Panel",
