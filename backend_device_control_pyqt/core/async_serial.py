@@ -390,14 +390,29 @@ class AsyncSerialDevice:
                     
                     if new_data:
                         total_received += len(new_data)
+                        end_hit_name = None
+                        end_hit_bytes = None
+
+                        # 累积到按包缓冲区并剔除尾部结束标记，避免将结束标记当作数据包
+                        data_buffer.extend(new_data)
+                        for seq_name, end_bytes in end_bytes_dict.items():
+                            if data_buffer.endswith(end_bytes):
+                                end_hit_name = seq_name
+                                end_hit_bytes = end_bytes
+                                del data_buffer[-len(end_bytes):]
+                                break
+
                         if not streaming_mode:
                             received_data.extend(new_data)
+                            if end_hit_bytes and received_data.endswith(end_hit_bytes):
+                                del received_data[-len(end_hit_bytes):]
                             len_received = len(received_data)
                         else:
                             tail_buffer.extend(new_data)
                             if max_end_len and len(tail_buffer) > max_end_len * 2:
                                 del tail_buffer[:len(tail_buffer) - max_end_len * 2]
                             len_received = total_received
+                        # data_buffer 此时仅包含完整数据，不含结束标记
                         
                         # 回调进度信息
                         if progress_callback:
@@ -406,8 +421,6 @@ class AsyncSerialDevice:
                         # 处理数据回调
                         if data_callback:
                             if packet_size > 0:
-                                # 按包大小聚合回调，减少每包回调的调度开销
-                                data_buffer.extend(new_data)
                                 full_len = (len(data_buffer) // packet_size) * packet_size
                                 if full_len:
                                     chunk = bytes(data_buffer[:full_len])
@@ -415,16 +428,23 @@ class AsyncSerialDevice:
                                     data_callback(chunk, self.device_id)
                             else:
                                 # 如果没有指定包大小，按原方式处理
-                                data_callback(new_data, self.device_id)
+                                data_callback(bytes(data_buffer), self.device_id)
+                                data_buffer.clear()
                             
                         logger.debug(f"设备 {self.device_id} 已接收 {len_received} 字节")
                         
                         # 检查是否收到任意结束序列
                         buffer_to_check = tail_buffer if streaming_mode else received_data
+                        # 如果上面已命中结束标记，也在此直接返回
+                        if end_hit_name and end_hit_bytes:
+                            logger.info(f"设备 {self.device_id} 检测到结束序列: {end_hit_name}")
+                            return (received_data if not streaming_mode else None), end_hit_name
                         for seq_name, end_bytes in end_bytes_dict.items():
                             if len(buffer_to_check) >= len(end_bytes):
                                 if buffer_to_check[-len(end_bytes):] == end_bytes:
                                     logger.info(f"设备 {self.device_id} 检测到结束序列: {seq_name}")
+                                    if not streaming_mode and received_data.endswith(end_bytes):
+                                        del received_data[-len(end_bytes):]
                                     return (received_data if not streaming_mode else None), seq_name
                                     
                 except asyncio.TimeoutError:
