@@ -725,13 +725,23 @@ class DeviceControlWidget(QWidget):
     def calibrate_all_devices(self):
         """对所有设备执行校零"""
         devices = []
+        busy_ports = set(self.current_test_ids.keys())
+        skipped_busy = []
         for i in range(self.device_list.count()):
             item = self.device_list.item(i)
             if not item:
                 continue
             device_data = item.data(Qt.UserRole + 1)
             if isinstance(device_data, dict):
+                port = device_data.get("device")
+                if port and port in busy_ports:
+                    skipped_busy.append(device_data)
+                    continue
                 devices.append(device_data)
+
+        if skipped_busy:
+            skip_names = ", ".join([d.get("device_id") or d.get("device") or "Unknown" for d in skipped_busy])
+            QMessageBox.information(self, tr("main.dialog.info"), f"以下设备正在测试中，已跳过校零: {skip_names}")
 
         self.start_calibration(devices, show_summary=True)
 
@@ -812,6 +822,11 @@ class DeviceControlWidget(QWidget):
         if not isinstance(device_data, dict):
             if show_message:
                 QMessageBox.warning(self, tr("main.dialog.warning"), "无效的设备信息")
+            return
+        port = device_data.get("device")
+        if port and port in self.current_test_ids:
+            if show_message:
+                QMessageBox.information(self, tr("main.dialog.info"), "设备正在测试中，已跳过校零")
             return
         self.start_calibration([device_data], show_summary=show_message)
 
