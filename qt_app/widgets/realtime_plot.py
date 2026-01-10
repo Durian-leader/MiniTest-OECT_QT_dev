@@ -529,6 +529,11 @@ class RealtimePlotWidget(QWidget):
                                        pen=pg.mkPen(color=colors[color_idx], width=2),
                                        name=curve_name)
             self.plot_lines[curve_name] = line
+            try:
+                # 确保图例同步更新（避免第二次输出测试图例缺失）
+                self.legend.addItem(line, curve_name)
+            except Exception:
+                pass
             
             # 关键修复：创建第一条output曲线时启用自动范围调整
             if len(self.plot_lines) == 1:
