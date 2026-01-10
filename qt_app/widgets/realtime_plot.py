@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import re
 import traceback
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QHBoxLayout, QCheckBox, QPushButton
 from PyQt5.QtCore import Qt, QTimer
@@ -498,6 +499,28 @@ class RealtimePlotWidget(QWidget):
                 logger.error(f"解析output元数据失败: {e}")
         
         return None, None, hex_data
+
+    def _split_output_segments(self, hex_data: str):
+        """Split concatenated OUTPUT_START/OUTPUT_META segments into individual chunks."""
+        if not isinstance(hex_data, str):
+            return [hex_data]
+
+        marker_re = re.compile(r"OUTPUT_(?:START|META):")
+        matches = list(marker_re.finditer(hex_data))
+        if not matches:
+            return [hex_data]
+
+        segments = []
+        # Keep any leading data before first marker (fallback)
+        if matches[0].start() > 0:
+            segments.append(hex_data[:matches[0].start()])
+
+        for idx, match in enumerate(matches):
+            start = match.start()
+            end = matches[idx + 1].start() if idx + 1 < len(matches) else len(hex_data)
+            segments.append(hex_data[start:end])
+
+        return segments
     
     def prepare_output_curve(self, gate_voltage: int, total_gate_voltages: int):
         """提前准备output曲线"""
@@ -677,23 +700,30 @@ class RealtimePlotWidget(QWidget):
             self._maybe_enable_autorange(x=True, y=True, force=True)
             logger.info("首次进入output步骤，启用自动范围调整")
         
-        # 解析output元数据
-        signal_type, output_metadata, clean_hex_data = self.parse_output_metadata(hex_data)
-        
-        if signal_type == "start":
-            # 处理开始信号：提前准备曲线
-            gate_voltage = output_metadata["gate_voltage"]
-            total_gate_voltages = output_metadata["total_gate_voltages"]
-            self.prepare_output_curve(gate_voltage, total_gate_voltages)
-            self._set_debug_message(tr("realtime.preparing_curve", voltage=gate_voltage), force=True)
-            
-        elif signal_type == "data" and output_metadata:
-            # 处理实际数据：多曲线模式
-            self.process_output_realtime_data(clean_hex_data, output_metadata)
-            
-        else:
-            # 无元数据：向后兼容模式
-            self.process_output_fallback(hex_data)
+        # 解析output元数据（支持拼接的多段数据）
+        if isinstance(hex_data, str) and ("OUTPUT_START:" in hex_data or "OUTPUT_META:" in hex_data):
+            segments = self._split_output_segments(hex_data)
+            for segment in segments:
+                if not segment:
+                    continue
+                signal_type, output_metadata, clean_hex_data = self.parse_output_metadata(segment)
+                if signal_type == "start":
+                    # 处理开始信号：提前准备曲线
+                    gate_voltage = output_metadata["gate_voltage"]
+                    total_gate_voltages = output_metadata["total_gate_voltages"]
+                    self.prepare_output_curve(gate_voltage, total_gate_voltages)
+                    self._set_debug_message(tr("realtime.preparing_curve", voltage=gate_voltage), force=True)
+                elif signal_type == "data" and output_metadata:
+                    # 处理实际数据：多曲线模式
+                    self.process_output_realtime_data(clean_hex_data, output_metadata)
+                else:
+                    # 只有完全没有元数据前缀时才降级
+                    if not (isinstance(segment, str) and segment.startswith("OUTPUT_")):
+                        self.process_output_fallback(segment)
+            return
+
+        # 无元数据：向后兼容模式
+        self.process_output_fallback(hex_data)
     
     def process_output_realtime_data(self, hex_data, output_metadata):
         """处理output类型的实时hex数据（多曲线模式）"""
