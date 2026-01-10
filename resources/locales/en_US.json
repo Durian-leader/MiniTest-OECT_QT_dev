@@ -50,7 +50,9 @@
     "card_completed": "Completed",
     "no_name": "Untitled",
     "columns_label": "Columns per row",
-    "columns_suffix": " cols"
+    "columns_suffix": " cols",
+    "height_label": "Plot height",
+    "height_suffix": " px"
   },
   "device_control": {
     "device_panel": "Device Panel",

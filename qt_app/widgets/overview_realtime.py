@@ -32,6 +32,7 @@ class OverviewRealtimeWidget(QWidget):
         super().__init__(parent)
         self.device_panels: Dict[str, Dict[str, Any]] = {}
         self.columns_count = 2
+        self.plot_height = 320
         self._setup_ui()
 
     def _setup_ui(self):
@@ -58,6 +59,17 @@ class OverviewRealtimeWidget(QWidget):
         self.columns_spin.setSuffix(tr("overview.columns_suffix"))
         self.columns_spin.valueChanged.connect(self._on_columns_changed)
         control_row.addWidget(self.columns_spin, 0, Qt.AlignLeft)
+
+        self.height_label = QLabel(tr("overview.height_label"))
+        control_row.addWidget(self.height_label, 0, Qt.AlignLeft)
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(200, 800)
+        self.height_spin.setSingleStep(20)
+        self.height_spin.setValue(self.plot_height)
+        self.height_spin.setSuffix(tr("overview.height_suffix"))
+        self.height_spin.valueChanged.connect(self._on_height_changed)
+        control_row.addWidget(self.height_spin, 0, Qt.AlignLeft)
+
         control_row.addStretch()
         layout.addLayout(control_row)
 
@@ -150,7 +162,7 @@ class OverviewRealtimeWidget(QWidget):
         panel_layout.addWidget(info_label)
 
         plot = RealtimePlotWidget(port)
-        plot.setMinimumHeight(320)
+        self._apply_plot_height(plot)
         panel_layout.addWidget(plot)
 
         panel = {
@@ -185,6 +197,15 @@ class OverviewRealtimeWidget(QWidget):
         self.columns_count = max(1, value)
         self._rebuild_grid()
 
+    def _on_height_changed(self, value: int):
+        self.plot_height = max(100, value)
+        for panel in self.device_panels.values():
+            self._apply_plot_height(panel["plot"])
+
+    def _apply_plot_height(self, plot: RealtimePlotWidget):
+        plot.setMinimumHeight(self.plot_height)
+        plot.setMaximumHeight(self.plot_height)
+
     def _update_panel_labels(self, port: str):
         panel = self.device_panels.get(port)
         if not panel:
@@ -209,5 +230,7 @@ class OverviewRealtimeWidget(QWidget):
         self.empty_label.setText(tr("overview.empty"))
         self.layout_label.setText(tr("overview.columns_label"))
         self.columns_spin.setSuffix(tr("overview.columns_suffix"))
+        self.height_label.setText(tr("overview.height_label"))
+        self.height_spin.setSuffix(tr("overview.height_suffix"))
         for port in list(self.device_panels.keys()):
             self._update_panel_labels(port)

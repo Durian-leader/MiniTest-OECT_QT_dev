@@ -50,7 +50,9 @@
     "card_completed": "已完成",
     "no_name": "未命名",
     "columns_label": "每行显示",
-    "columns_suffix": " 列"
+    "columns_suffix": " 列",
+    "height_label": "图窗高度",
+    "height_suffix": " px"
   },
   "device_control": {
     "device_panel": "设备看板",
