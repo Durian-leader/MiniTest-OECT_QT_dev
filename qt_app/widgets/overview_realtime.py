@@ -146,6 +146,7 @@ class OverviewRealtimeWidget(QWidget):
         except Exception:
             pass
         self._update_panel_labels(port)
+        self._ensure_filter_action(port, panel.get("meta", {}))
 
     def _get_or_create_panel(self, port: str) -> Dict[str, Any]:
         if port in self.device_panels:
@@ -319,3 +320,34 @@ class OverviewRealtimeWidget(QWidget):
         self._refresh_filter_button_text()
         for port in list(self.device_panels.keys()):
             self._update_panel_labels(port)
+
+    def update_device_list(self, devices: list):
+        """Synchronize filter list with device control panel."""
+        ports_from_devices = set()
+        for device in devices or []:
+            port = device.get("device")
+            if not port:
+                continue
+            ports_from_devices.add(port)
+            meta = {
+                "device_id": device.get("device_id"),
+                "description": device.get("description"),
+                "port": port,
+            }
+            self._ensure_filter_action(port, meta)
+
+        # Keep actions for active panels even if device temporarily missing
+        for panel in self.device_panels.values():
+            port = panel.get("meta", {}).get("port")
+            if port:
+                ports_from_devices.add(port)
+                self._ensure_filter_action(port, panel.get("meta", {}))
+
+        # Remove stale actions
+        for port in list(self.filter_actions.keys()):
+            if port not in ports_from_devices:
+                action = self.filter_actions.pop(port)
+                self.filter_menu.removeAction(action)
+
+        self._refresh_filter_button_text()
+        self._rebuild_grid()

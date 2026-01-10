@@ -195,6 +195,7 @@ class DeviceControlWidget(QWidget):
     Widget for device control including device list, workflow configuration, and real-time plotting
     """
 
+    devices_updated = pyqtSignal(list)
     # Signals for sharing real-time data and lifecycle events with other tabs
     real_time_data = pyqtSignal(str, dict)
     test_started = pyqtSignal(str, str, dict)
@@ -724,6 +725,10 @@ class DeviceControlWidget(QWidget):
                 self.device_list.setCurrentRow(0)
                 
             logger.info(f"设备列表已刷新: {len(devices)} 个设备")
+            try:
+                self.devices_updated.emit(devices)
+            except Exception:
+                pass
         
         except Exception as e:
             QMessageBox.warning(self, "Error", f"获取设备列表失败: {str(e)}")

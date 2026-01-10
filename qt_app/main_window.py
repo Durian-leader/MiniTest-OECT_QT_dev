@@ -79,6 +79,7 @@ class MainWindow(QMainWindow):
         self.device_control.real_time_data.connect(self.overview.handle_real_time_data)
         self.device_control.test_started.connect(self.overview.handle_test_started)
         self.device_control.test_completed.connect(self.overview.handle_test_completed)
+        self.device_control.devices_updated.connect(self.overview.update_device_list)
 
         # Connect tab change signal
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
