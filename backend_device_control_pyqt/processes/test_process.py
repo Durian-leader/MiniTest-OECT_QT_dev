@@ -1528,6 +1528,12 @@ def initialize_test_step_classes(data_bridge):
     def step_aware_data_callback(self, hex_data, dev_id: str):
         test_id = self.step_id
         step_type = self.get_step_type()  # 获取当前步骤类型
+        # 若启用了流式保存，直接追加到流式缓存
+        try:
+            if getattr(self, "streaming_saver", None):
+                self.streaming_saver.feed(hex_data)
+        except Exception as e:
+            logger.error(f"流式保存数据失败: {e}")
         
         # 构造工作流信息
         workflow_info = {
