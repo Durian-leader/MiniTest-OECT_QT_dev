@@ -11,6 +11,8 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QGridLayout,
     QSpinBox,
+    QListWidget,
+    QListWidgetItem,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -33,6 +35,7 @@ class OverviewRealtimeWidget(QWidget):
         self.device_panels: Dict[str, Dict[str, Any]] = {}
         self.columns_count = 2
         self.plot_height = 320
+        self.min_column_width = 320
         self._setup_ui()
 
     def _setup_ui(self):
@@ -73,6 +76,17 @@ class OverviewRealtimeWidget(QWidget):
         control_row.addStretch()
         layout.addLayout(control_row)
 
+        filter_row = QHBoxLayout()
+        filter_row.setContentsMargins(0, 0, 0, 0)
+        filter_row.setSpacing(6)
+        self.filter_label = QLabel(tr("overview.filter_label"))
+        filter_row.addWidget(self.filter_label, 0, Qt.AlignLeft)
+        self.device_filter = QListWidget()
+        self.device_filter.setMaximumHeight(90)
+        self.device_filter.itemChanged.connect(self._on_filter_changed)
+        filter_row.addWidget(self.device_filter, 1)
+        layout.addLayout(filter_row)
+
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_content = QWidget()
@@ -107,6 +121,8 @@ class OverviewRealtimeWidget(QWidget):
         panel["status_label"].setText(tr("overview.card_running"))
         panel["container"].setStyleSheet("QGroupBox { border: 1px solid #ddd; border-radius: 6px; }")
         self.empty_label.setVisible(False)
+        self._ensure_filter_item(port, panel["meta"])
+        self._apply_filter_visibility(port)
 
     def handle_real_time_data(self, port: str, data: Dict[str, Any]):
         """Forward real-time data to the corresponding plot."""
@@ -188,7 +204,13 @@ class OverviewRealtimeWidget(QWidget):
             if item.widget():
                 item.widget().setParent(self.scroll_content)
 
-        for idx, panel in enumerate(self.device_panels.values()):
+        visible_panels = [p for p in self.device_panels.values() if self._is_panel_visible(p)]
+
+        for col in range(self.columns_count):
+            self.devices_layout.setColumnStretch(col, 1)
+            self.devices_layout.setColumnMinimumWidth(col, self.min_column_width)
+
+        for idx, panel in enumerate(visible_panels):
             row = idx // self.columns_count
             col = idx % self.columns_count
             self.devices_layout.addWidget(panel["container"], row, col)
@@ -205,6 +227,39 @@ class OverviewRealtimeWidget(QWidget):
     def _apply_plot_height(self, plot: RealtimePlotWidget):
         plot.setMinimumHeight(self.plot_height)
         plot.setMaximumHeight(self.plot_height)
+
+    def _on_filter_changed(self, item: QListWidgetItem):
+        port = item.data(Qt.UserRole)
+        self._apply_filter_visibility(port)
+        self._rebuild_grid()
+
+    def _apply_filter_visibility(self, port: str):
+        panel = self.device_panels.get(port)
+        if not panel:
+            return
+        panel["container"].setVisible(self._is_panel_visible(panel))
+
+    def _is_panel_visible(self, panel: Dict[str, Any]) -> bool:
+        port = panel["meta"].get("port") or panel["meta"].get("device") or ""
+        for i in range(self.device_filter.count()):
+            item = self.device_filter.item(i)
+            if item and item.data(Qt.UserRole) == port:
+                return item.checkState() == Qt.Checked
+        return True
+
+    def _ensure_filter_item(self, port: str, meta: Dict[str, Any]):
+        name = meta.get("device_id") or port
+        for i in range(self.device_filter.count()):
+            item = self.device_filter.item(i)
+            if item and item.data(Qt.UserRole) == port:
+                # Update label if needed
+                item.setText(name)
+                return
+        item = QListWidgetItem(name)
+        item.setData(Qt.UserRole, port)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked)
+        self.device_filter.addItem(item)
 
     def _update_panel_labels(self, port: str):
         panel = self.device_panels.get(port)
@@ -232,5 +287,6 @@ class OverviewRealtimeWidget(QWidget):
         self.columns_spin.setSuffix(tr("overview.columns_suffix"))
         self.height_label.setText(tr("overview.height_label"))
         self.height_spin.setSuffix(tr("overview.height_suffix"))
+        self.filter_label.setText(tr("overview.filter_label"))
         for port in list(self.device_panels.keys()):
             self._update_panel_labels(port)

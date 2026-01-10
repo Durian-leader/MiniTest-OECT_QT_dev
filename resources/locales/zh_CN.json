@@ -52,7 +52,8 @@
     "columns_label": "每行显示",
     "columns_suffix": " 列",
     "height_label": "图窗高度",
-    "height_suffix": " px"
+    "height_suffix": " px",
+    "filter_label": "显示设备"
   },
   "device_control": {
     "device_panel": "设备看板",
