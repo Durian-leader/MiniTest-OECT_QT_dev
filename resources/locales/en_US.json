@@ -48,7 +48,9 @@
     "card_test_line": "{name} (ID: {test_id}) · {status}",
     "card_running": "Collecting",
     "card_completed": "Completed",
-    "no_name": "Untitled"
+    "no_name": "Untitled",
+    "columns_label": "Columns per row",
+    "columns_suffix": " cols"
   },
   "device_control": {
     "device_panel": "Device Panel",

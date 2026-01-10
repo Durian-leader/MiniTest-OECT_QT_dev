@@ -9,6 +9,8 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QSizePolicy,
+    QGridLayout,
+    QSpinBox,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -29,6 +31,7 @@ class OverviewRealtimeWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.device_panels: Dict[str, Dict[str, Any]] = {}
+        self.columns_count = 2
         self._setup_ui()
 
     def _setup_ui(self):
@@ -44,13 +47,27 @@ class OverviewRealtimeWidget(QWidget):
         self.subtitle_label.setStyleSheet("color: #666;")
         layout.addWidget(self.subtitle_label)
 
+        control_row = QHBoxLayout()
+        control_row.setContentsMargins(0, 0, 0, 0)
+        control_row.setSpacing(6)
+        self.layout_label = QLabel(tr("overview.columns_label"))
+        control_row.addWidget(self.layout_label, 0, Qt.AlignLeft)
+        self.columns_spin = QSpinBox()
+        self.columns_spin.setRange(1, 4)
+        self.columns_spin.setValue(self.columns_count)
+        self.columns_spin.setSuffix(tr("overview.columns_suffix"))
+        self.columns_spin.valueChanged.connect(self._on_columns_changed)
+        control_row.addWidget(self.columns_spin, 0, Qt.AlignLeft)
+        control_row.addStretch()
+        layout.addLayout(control_row)
+
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_content = QWidget()
-        self.devices_layout = QVBoxLayout(self.scroll_content)
+        self.devices_layout = QGridLayout(self.scroll_content)
         self.devices_layout.setContentsMargins(0, 0, 0, 0)
-        self.devices_layout.setSpacing(10)
-        self.devices_layout.addStretch()
+        self.devices_layout.setHorizontalSpacing(10)
+        self.devices_layout.setVerticalSpacing(10)
         self.scroll_area.setWidget(self.scroll_content)
         layout.addWidget(self.scroll_area, 1)
 
@@ -148,9 +165,25 @@ class OverviewRealtimeWidget(QWidget):
         }
         self.device_panels[port] = panel
 
-        insert_at = max(self.devices_layout.count() - 1, 0)
-        self.devices_layout.insertWidget(insert_at, container)
+        self._rebuild_grid()
         return panel
+
+    def _rebuild_grid(self):
+        """Re-apply grid positions based on columns."""
+        # Clear existing items
+        while self.devices_layout.count():
+            item = self.devices_layout.takeAt(0)
+            if item.widget():
+                item.widget().setParent(self.scroll_content)
+
+        for idx, panel in enumerate(self.device_panels.values()):
+            row = idx // self.columns_count
+            col = idx % self.columns_count
+            self.devices_layout.addWidget(panel["container"], row, col)
+
+    def _on_columns_changed(self, value: int):
+        self.columns_count = max(1, value)
+        self._rebuild_grid()
 
     def _update_panel_labels(self, port: str):
         panel = self.device_panels.get(port)
@@ -174,5 +207,7 @@ class OverviewRealtimeWidget(QWidget):
         self.header_label.setText(tr("overview.title"))
         self.subtitle_label.setText(tr("overview.subtitle"))
         self.empty_label.setText(tr("overview.empty"))
+        self.layout_label.setText(tr("overview.columns_label"))
+        self.columns_spin.setSuffix(tr("overview.columns_suffix"))
         for port in list(self.device_panels.keys()):
             self._update_panel_labels(port)

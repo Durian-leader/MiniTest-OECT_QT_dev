@@ -48,7 +48,9 @@
     "card_test_line": "{name} (ID: {test_id}) · {status}",
     "card_running": "采集中",
     "card_completed": "已完成",
-    "no_name": "未命名"
+    "no_name": "未命名",
+    "columns_label": "每行显示",
+    "columns_suffix": " 列"
   },
   "device_control": {
     "device_panel": "设备看板",

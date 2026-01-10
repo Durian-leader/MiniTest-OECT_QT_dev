@@ -745,11 +745,8 @@ class DeviceControlWidget(QWidget):
                     continue
                 devices.append(device_data)
 
-        if skipped_busy:
-            skip_names = ", ".join([d.get("device_id") or d.get("device") or "Unknown" for d in skipped_busy])
-            QMessageBox.information(self, tr("main.dialog.info"), f"以下设备正在测试中，已跳过校零: {skip_names}")
-
-        self.start_calibration(devices, show_summary=True)
+        # 直接校零可用设备，跳过的设备在完成时统一提示
+        self.start_calibration(devices, show_summary=True, skipped_devices=skipped_busy)
 
     def force_refresh_devices(self):
         """强制重新扫描设备硬件（原刷新按钮的行为）"""
@@ -757,8 +754,13 @@ class DeviceControlWidget(QWidget):
         self.refresh_devices()
 
     def start_calibration(self, devices, show_summary: bool = True, skipped_devices=None):
+        skipped_devices = skipped_devices or []
         if not devices:
-            QMessageBox.information(self, tr("main.dialog.info"), "没有可校零的设备")
+            if skipped_devices:
+                skip_names = ", ".join([d.get("device_id") or d.get("device") or "Unknown" for d in skipped_devices])
+                QMessageBox.information(self, tr("main.dialog.info"), f"校零完成: 0/0 成功\n跳过: {skip_names}")
+            else:
+                QMessageBox.information(self, tr("main.dialog.info"), "没有可校零的设备")
             return
         if self._calibration_thread and self._calibration_thread.isRunning():
             QMessageBox.warning(self, tr("main.dialog.warning"), "校零正在进行中")
@@ -816,6 +818,9 @@ class DeviceControlWidget(QWidget):
                     msg += "\n成功基线: " + "; ".join([f"{name}:{val:.3e}" for name, val in success])
                 if failed:
                     msg += "\n失败: " + "; ".join([f"{name}:{reason}" for name, reason in failed])
+                if skipped_devices:
+                    skip_names = "; ".join([d.get("device_id") or d.get("device") or "Unknown" for d in skipped_devices])
+                    msg += "\n跳过: " + skip_names
                 QMessageBox.information(self, tr("main.dialog.info"), msg)
 
         def on_canceled():
