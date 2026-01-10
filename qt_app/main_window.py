@@ -72,8 +72,8 @@ class MainWindow(QMainWindow):
         self.overview = OverviewRealtimeWidget()
 
         self.tab_widget.addTab(self.device_control, tr("main.tab_device_control"))
-        self.tab_widget.addTab(self.test_history, tr("main.tab_test_history"))
         self.tab_widget.addTab(self.overview, tr("main.tab_overview"))
+        self.tab_widget.addTab(self.test_history, tr("main.tab_test_history"))
 
         # Wire real-time data to overview tab
         self.device_control.real_time_data.connect(self.overview.handle_real_time_data)
