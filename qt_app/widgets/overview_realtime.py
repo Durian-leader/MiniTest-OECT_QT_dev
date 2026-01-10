@@ -11,8 +11,8 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QGridLayout,
     QSpinBox,
-    QListWidget,
-    QListWidgetItem,
+    QToolButton,
+    QMenu,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -36,6 +36,8 @@ class OverviewRealtimeWidget(QWidget):
         self.columns_count = 2
         self.plot_height = 320
         self.min_column_width = 320
+        self._chrome_height = 140  # Approximate non-plot height for uniform cards
+        self.filter_actions: Dict[str, Any] = {}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -73,19 +75,15 @@ class OverviewRealtimeWidget(QWidget):
         self.height_spin.valueChanged.connect(self._on_height_changed)
         control_row.addWidget(self.height_spin, 0, Qt.AlignLeft)
 
+        self.filter_button = QToolButton()
+        self.filter_button.setText(tr("overview.filter_label"))
+        self.filter_button.setPopupMode(QToolButton.InstantPopup)
+        self.filter_menu = QMenu(self)
+        self.filter_button.setMenu(self.filter_menu)
+        control_row.addWidget(self.filter_button, 0, Qt.AlignLeft)
+
         control_row.addStretch()
         layout.addLayout(control_row)
-
-        filter_row = QHBoxLayout()
-        filter_row.setContentsMargins(0, 0, 0, 0)
-        filter_row.setSpacing(6)
-        self.filter_label = QLabel(tr("overview.filter_label"))
-        filter_row.addWidget(self.filter_label, 0, Qt.AlignLeft)
-        self.device_filter = QListWidget()
-        self.device_filter.setMaximumHeight(90)
-        self.device_filter.itemChanged.connect(self._on_filter_changed)
-        filter_row.addWidget(self.device_filter, 1)
-        layout.addLayout(filter_row)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -106,6 +104,7 @@ class OverviewRealtimeWidget(QWidget):
         """Create or reset a panel when a device test starts."""
         panel = self._get_or_create_panel(port)
         panel["meta"] = metadata or {}
+        panel["meta"]["port"] = port
         panel["meta"]["test_id"] = test_id
         panel["completed"] = False
         plot: RealtimePlotWidget = panel["plot"]
@@ -121,7 +120,7 @@ class OverviewRealtimeWidget(QWidget):
         panel["status_label"].setText(tr("overview.card_running"))
         panel["container"].setStyleSheet("QGroupBox { border: 1px solid #ddd; border-radius: 6px; }")
         self.empty_label.setVisible(False)
-        self._ensure_filter_item(port, panel["meta"])
+        self._ensure_filter_action(port, panel["meta"])
         self._apply_filter_visibility(port)
 
     def handle_real_time_data(self, port: str, data: Dict[str, Any]):
@@ -205,6 +204,8 @@ class OverviewRealtimeWidget(QWidget):
                 item.widget().setParent(self.scroll_content)
 
         visible_panels = [p for p in self.device_panels.values() if self._is_panel_visible(p)]
+        target_width = self._compute_card_width()
+        target_height = self._compute_card_height()
 
         for col in range(self.columns_count):
             self.devices_layout.setColumnStretch(col, 1)
@@ -213,7 +214,12 @@ class OverviewRealtimeWidget(QWidget):
         for idx, panel in enumerate(visible_panels):
             row = idx // self.columns_count
             col = idx % self.columns_count
-            self.devices_layout.addWidget(panel["container"], row, col)
+            container = panel["container"]
+            container.setMinimumWidth(target_width)
+            container.setMaximumWidth(target_width)
+            container.setMinimumHeight(target_height)
+            container.setMaximumHeight(target_height)
+            self.devices_layout.addWidget(container, row, col)
 
     def _on_columns_changed(self, value: int):
         self.columns_count = max(1, value)
@@ -223,43 +229,66 @@ class OverviewRealtimeWidget(QWidget):
         self.plot_height = max(100, value)
         for panel in self.device_panels.values():
             self._apply_plot_height(panel["plot"])
+        self._rebuild_grid()
 
     def _apply_plot_height(self, plot: RealtimePlotWidget):
         plot.setMinimumHeight(self.plot_height)
         plot.setMaximumHeight(self.plot_height)
+        self._rebuild_grid()
 
-    def _on_filter_changed(self, item: QListWidgetItem):
-        port = item.data(Qt.UserRole)
-        self._apply_filter_visibility(port)
+    def _compute_card_width(self) -> int:
+        available = self.scroll_area.viewport().width()
+        spacing = self.devices_layout.horizontalSpacing() or 0
+        columns = max(1, self.columns_count)
+        target = (available - spacing * (columns - 1)) / columns
+        return max(int(target), self.min_column_width)
+
+    def _compute_card_height(self) -> int:
+        return self.plot_height + self._chrome_height
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
         self._rebuild_grid()
 
     def _apply_filter_visibility(self, port: str):
         panel = self.device_panels.get(port)
         if not panel:
             return
-        panel["container"].setVisible(self._is_panel_visible(panel))
+        panel["container"].setVisible(self._is_panel_visible(port))
 
-    def _is_panel_visible(self, panel: Dict[str, Any]) -> bool:
-        port = panel["meta"].get("port") or panel["meta"].get("device") or ""
-        for i in range(self.device_filter.count()):
-            item = self.device_filter.item(i)
-            if item and item.data(Qt.UserRole) == port:
-                return item.checkState() == Qt.Checked
+    def _is_panel_visible(self, port_or_panel) -> bool:
+        port = port_or_panel
+        if isinstance(port_or_panel, dict):
+            port = port_or_panel.get("meta", {}).get("port") or ""
+        action = self.filter_actions.get(port)
+        if action:
+            return action.isChecked()
         return True
 
-    def _ensure_filter_item(self, port: str, meta: Dict[str, Any]):
+    def _ensure_filter_action(self, port: str, meta: Dict[str, Any]):
         name = meta.get("device_id") or port
-        for i in range(self.device_filter.count()):
-            item = self.device_filter.item(i)
-            if item and item.data(Qt.UserRole) == port:
-                # Update label if needed
-                item.setText(name)
-                return
-        item = QListWidgetItem(name)
-        item.setData(Qt.UserRole, port)
-        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-        item.setCheckState(Qt.Checked)
-        self.device_filter.addItem(item)
+        if port in self.filter_actions:
+            action = self.filter_actions[port]
+            action.setText(name)
+            return
+
+        action = self.filter_menu.addAction(name)
+        action.setCheckable(True)
+        action.setChecked(True)
+        action.setData(port)
+        action.toggled.connect(lambda checked, p=port: self._on_filter_toggled(p, checked))
+        self.filter_actions[port] = action
+        self._refresh_filter_button_text()
+
+    def _on_filter_toggled(self, port: str, checked: bool):
+        self._apply_filter_visibility(port)
+        self._refresh_filter_button_text()
+        self._rebuild_grid()
+
+    def _refresh_filter_button_text(self):
+        total = len(self.filter_actions)
+        shown = len([a for a in self.filter_actions.values() if a.isChecked()])
+        self.filter_button.setText(tr("overview.filter_label") + f" ({shown}/{total})" if total else tr("overview.filter_label"))
 
     def _update_panel_labels(self, port: str):
         panel = self.device_panels.get(port)
@@ -287,6 +316,6 @@ class OverviewRealtimeWidget(QWidget):
         self.columns_spin.setSuffix(tr("overview.columns_suffix"))
         self.height_label.setText(tr("overview.height_label"))
         self.height_spin.setSuffix(tr("overview.height_suffix"))
-        self.filter_label.setText(tr("overview.filter_label"))
+        self._refresh_filter_button_text()
         for port in list(self.device_panels.keys()):
             self._update_panel_labels(port)

@@ -215,6 +215,9 @@ class MainWindow(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
+            # Attempt to stop all active tests before shutdown
+            self.stop_all_active_tests()
+
             # Save geometry
             self.save_geometry()
             
@@ -226,6 +229,24 @@ class MainWindow(QMainWindow):
         else:
             # Ignore the event (cancel closing)
             event.ignore()
+
+    def stop_all_active_tests(self):
+        """Send stop commands to all active tests before closing the app."""
+        if not hasattr(self, "device_control") or not hasattr(self, "backend"):
+            return
+
+        active = list(getattr(self.device_control, "current_test_ids", {}).items())
+        if not active:
+            return
+
+        items = [{"port": port, "test_id": test_id} for port, test_id in active]
+        try:
+            results = self.backend.stop_tests(items, timeout_per_device=3.0)
+            stopped = [item.get("port") for item, res in results if res.get("status") == "ok"]
+            if stopped:
+                logger.info(f"Stopped tests before exit: {', '.join(stopped)}")
+        except Exception as exc:
+            logger.error(f"Failed to stop active tests on exit: {exc}")
 
 def exception_hook(exctype, value, traceback):
     """Custom exception hook to show error dialogs"""
