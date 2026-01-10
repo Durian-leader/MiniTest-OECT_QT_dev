@@ -15,19 +15,28 @@ def ADS_CalVoltage(data):
         voltage = (data / 8388607.0) * 2.048
     return voltage
 
-def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, transient_packet_size: int = 7,
-                   baseline_current: float = 0.0):
-    """Convert byte data to a numpy array."""
+def _strip_trailing_markers(byte_data: bytes, packet_size: int) -> bytes:
+    """Remove known end markers and repetitive filler (e.g., FE/FF) that may be appended by firmware."""
     end_sequences = [
         b'\xFE\xFE\xFE\xFE\xFE\xFE\xFE\xFE',
         b'\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF',
         b'\xCD\xAB\xEF\xCD\xAB\xEF\xCD\xAB',
     ]
-
     for end_seq in end_sequences:
         if byte_data.endswith(end_seq):
-            byte_data = byte_data[:-len(end_seq)]
-            break
+            return byte_data[:-len(end_seq)]
+
+    # Some old firmware may send shorter trailing markers (e.g., 7 x FE/FF)
+    if packet_size > 0 and len(byte_data) >= packet_size:
+        tail = byte_data[-packet_size:]
+        if all(b == 0xFE for b in tail) or all(b == 0xFF for b in tail):
+            return byte_data[:-packet_size]
+    return byte_data
+
+
+def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, transient_packet_size: int = 7,
+                   baseline_current: float = 0.0):
+    """Convert byte data to a numpy array."""
 
     try:
         transimpedance_ohms = float(transimpedance_ohms)
@@ -51,6 +60,9 @@ def bytes_to_numpy(byte_data, mode='transient', transimpedance_ohms=100.0, trans
         packet_size = transient_packet_size
     else:
         packet_size = 5
+
+    # 去除结束标志或尾部填充
+    byte_data = _strip_trailing_markers(byte_data, packet_size)
 
     complete_bytes = (len(byte_data) // packet_size) * packet_size
     if complete_bytes < len(byte_data):
