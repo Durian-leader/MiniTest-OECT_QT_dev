@@ -38,9 +38,10 @@ class OutputStep(TestStep):
             self.gate_voltages = gate_voltage_list
         else:
             self.gate_voltages = [gate_voltage_list]
-        
+
         # 存储所有扫描的数据
         self.all_scan_data = {}  # {vg_value: data_array}
+        self.gate_data_buffers = {}  # {vg_value: bytearray()}
         
         # *** 新增：当前栅极电压跟踪 ***
         self.current_gate_voltage = None
@@ -109,6 +110,15 @@ class OutputStep(TestStep):
                 logger.debug(f"栅极电压未设置，缓存数据: {len(hex_data)} 字符")
                 self.pending_data_buffer.append((hex_data, dev_id))
                 return
+
+            # 累积到对应栅极的原始数据缓冲，用于停止时仍能保存数据
+            try:
+                raw_bytes = bytes.fromhex(hex_data.replace(" ", "")) if isinstance(hex_data, str) else bytes(hex_data)
+                buffer = self.gate_data_buffers.setdefault(gate_voltage, bytearray())
+                buffer.extend(raw_bytes)
+            except Exception as e:
+                logger.error(f"累积output原始数据失败: {e}")
+                # 不中断发送
                 
             # 构造output元数据
             output_metadata = {
@@ -160,6 +170,8 @@ class OutputStep(TestStep):
     async def execute(self):
         """Execute the output test step for all gate voltages"""
         self.start_time = datetime.now().isoformat()
+        # 清理旧缓存
+        self.gate_data_buffers = {}
         
         logger.info(f"开始输出特性测试，栅极电压: {self.gate_voltages}")
         
@@ -174,7 +186,7 @@ class OutputStep(TestStep):
             self.flush_pending_data()
             
             # *** 关键修改3：发送栅极电压开始信号 ***
-            await self.send_gate_voltage_start_signal(gate_voltage, "device_placeholder")
+            await self.send_gate_voltage_start_signal(gate_voltage, getattr(self.device, "device_id", "unknown"))
             
             # 更新进度
             base_progress = i / len(self.gate_voltages)
@@ -207,10 +219,14 @@ class OutputStep(TestStep):
             self.flush_pending_data()
             
             # 存储这次扫描的数据，并清理结束序列
-            if data_result:
+            if data_result is not None:
                 # 清理结束序列，防止影响下次扫描
                 cleaned_data = self.remove_end_sequence(data_result)
-                self.all_scan_data[gate_voltage] = cleaned_data
+                if cleaned_data:
+                    buffer = self.gate_data_buffers.setdefault(gate_voltage, bytearray())
+                    # 只有在缓冲为空时才追加整体数据，避免与流式累积重复
+                    if not buffer:
+                        buffer.extend(cleaned_data)
             
             # 检查是否被停止
             if self.device._stop_event.is_set():
@@ -251,11 +267,13 @@ class OutputStep(TestStep):
             
             # 解析每个栅极电压的数据
             parsed_data = {}
-            for vg, raw_data in self.all_scan_data.items():
+            source_map = self.gate_data_buffers if self.gate_data_buffers else self.all_scan_data
+            for vg, raw_data in source_map.items():
                 if raw_data:
+                    raw_bytes = bytes(raw_data)
                     # 使用transfer模式解析（因为都是电压+电流格式）
                     data_array = bytes_to_numpy(
-                        raw_data,
+                        raw_bytes,
                         mode='transfer',
                         transimpedance_ohms=self.transimpedance_ohms,
                         baseline_current=self.baseline_current
