@@ -41,6 +41,7 @@ class TestStep(ABC):
         self.result = None
         self.reason = None
         self.workflow_progress_info = workflow_progress_info or {}
+        self.streaming_saver = None  # Optional IncrementalStepSaver for long-running steps
         
     @abstractmethod
     async def execute(self) -> Tuple[bytes, str]:
@@ -192,6 +193,13 @@ class TestStep(ABC):
             logger.debug(f"数据已发送: test_id={self.step_id}, data_length={len(str(hex_data)) if isinstance(hex_data, str) else 'binary'}")
         except Exception as e:
             logger.error(f"发送数据失败: {str(e)}")
+        
+        # 增量持久化（如已启用）
+        if self.streaming_saver:
+            try:
+                self.streaming_saver.feed(hex_data)
+            except Exception as e:
+                logger.error(f"增量保存数据失败: {e}")
         
     def get_step_info(self) -> Dict[str, Any]:
         """Return step information for reporting"""

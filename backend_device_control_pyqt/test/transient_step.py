@@ -62,13 +62,15 @@ class TransientStep(TestStep):
         self.start_time = datetime.now().isoformat()
         
         cmd_str = self.generate_command()
+        streaming_mode = bool(getattr(self, "streaming_saver", None))
         data_result, reason = await self.device.send_and_receive_command(
             command=cmd_str,
             end_sequences={self.get_step_type(): self.get_end_sequence()},
             timeout=None,
             packet_size=self.get_packet_size(),
             progress_callback=self.progress_callback,
-            data_callback=self.data_callback
+            data_callback=self.data_callback,
+            streaming_mode=streaming_mode
         )
         
         self.end_time = datetime.now().isoformat()

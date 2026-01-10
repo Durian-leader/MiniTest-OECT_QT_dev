@@ -304,7 +304,8 @@ class AsyncSerialDevice:
         timeout: Optional[float] = None,
         progress_callback: Optional[Callable[[int, str], None]] = None,
         data_callback: Optional[Callable[[Union[str, bytes], str], None]] = None,
-        packet_size: Optional[int] = None
+        packet_size: Optional[int] = None,
+        streaming_mode: bool = False
     ) -> Tuple[Union[str, None], str]:
         """
         异步发送命令并接收响应，直到收到结束序列
@@ -316,6 +317,7 @@ class AsyncSerialDevice:
             progress_callback: 进度回调函数，参数为(已接收字节数, 设备ID)
             data_callback: 数据回调函数，参数为(接收到的数据(字节或十六进制字符串), 设备ID)
             packet_size: 数据包长度（字节数），如果指定，则按固定长度切分数据包
+            streaming_mode: 若为True，不累积全部数据，结合data_callback进行流式处理
             
         Returns:
             元组 (接收到的数据的十六进制字符串, 结束原因)
@@ -339,6 +341,8 @@ class AsyncSerialDevice:
             
         # 创建数据缓冲区
         data_buffer = bytearray()
+        tail_buffer = bytearray()
+        max_end_len = max(len(v) for v in end_sequences.values()) if end_sequences else 0
         
         try:
             # 转换结束序列为字节
@@ -351,6 +355,7 @@ class AsyncSerialDevice:
             # 接收数据
             received_data = bytearray()
             start_time = time.time()
+            total_received = 0
             
             # 读取超时设置为较短时间，以便定期检查停止信号
             read_timeout = 0.5
@@ -384,8 +389,15 @@ class AsyncSerialDevice:
                     new_data = await asyncio.wait_for(self.reader.read(self.read_chunk_size), read_timeout)
                     
                     if new_data:
-                        received_data.extend(new_data)
-                        len_received = len(received_data)
+                        total_received += len(new_data)
+                        if not streaming_mode:
+                            received_data.extend(new_data)
+                            len_received = len(received_data)
+                        else:
+                            tail_buffer.extend(new_data)
+                            if max_end_len and len(tail_buffer) > max_end_len * 2:
+                                del tail_buffer[:len(tail_buffer) - max_end_len * 2]
+                            len_received = total_received
                         
                         # 回调进度信息
                         if progress_callback:
@@ -408,11 +420,12 @@ class AsyncSerialDevice:
                         logger.debug(f"设备 {self.device_id} 已接收 {len_received} 字节")
                         
                         # 检查是否收到任意结束序列
+                        buffer_to_check = tail_buffer if streaming_mode else received_data
                         for seq_name, end_bytes in end_bytes_dict.items():
-                            if len(received_data) >= len(end_bytes):
-                                if received_data[-len(end_bytes):] == end_bytes:
+                            if len(buffer_to_check) >= len(end_bytes):
+                                if buffer_to_check[-len(end_bytes):] == end_bytes:
                                     logger.info(f"设备 {self.device_id} 检测到结束序列: {seq_name}")
-                                    return received_data, seq_name
+                                    return (received_data if not streaming_mode else None), seq_name
                                     
                 except asyncio.TimeoutError:
                     # 短暂超时，继续循环

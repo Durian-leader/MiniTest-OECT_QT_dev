@@ -17,6 +17,7 @@ PERFORMANCE_CONFIG_FILENAME = "performance_config.json"
 DEFAULT_SERIAL_READ_CHUNK_SIZE = 4096
 DEFAULT_BUFFER_FLUSH_PACKET_COUNT = 200
 DEFAULT_BUFFER_FLUSH_INTERVAL_SEC = 0.2
+DEFAULT_INCREMENTAL_SAVE_INTERVAL_SEC = 5.0
 
 
 def _config_paths_for(filename: str) -> List[str]:
@@ -92,7 +93,7 @@ _BIAS_CURRENT, _BIAS_REFERENCE_TRANSIMPEDANCE = load_bias_current_config()
 
 
 def load_performance_config(path: Optional[str] = None) -> tuple:
-    """Load performance tuning config: (read_chunk, buffer_packet_count, buffer_flush_interval)."""
+    """Load performance tuning config: (read_chunk, buffer_packet_count, buffer_flush_interval, incremental_save_interval)."""
     config_paths = [path] if path else _config_paths_for(PERFORMANCE_CONFIG_FILENAME)
     data = None
     for candidate in config_paths:
@@ -108,6 +109,7 @@ def load_performance_config(path: Optional[str] = None) -> tuple:
                 DEFAULT_SERIAL_READ_CHUNK_SIZE,
                 DEFAULT_BUFFER_FLUSH_PACKET_COUNT,
                 DEFAULT_BUFFER_FLUSH_INTERVAL_SEC,
+                DEFAULT_INCREMENTAL_SAVE_INTERVAL_SEC,
             )
 
     if data is None:
@@ -115,6 +117,7 @@ def load_performance_config(path: Optional[str] = None) -> tuple:
             DEFAULT_SERIAL_READ_CHUNK_SIZE,
             DEFAULT_BUFFER_FLUSH_PACKET_COUNT,
             DEFAULT_BUFFER_FLUSH_INTERVAL_SEC,
+            DEFAULT_INCREMENTAL_SAVE_INTERVAL_SEC,
         )
 
     def _parse_int(value, default):
@@ -137,11 +140,15 @@ def load_performance_config(path: Optional[str] = None) -> tuple:
         data.get("buffer_flush_interval_sec"),
         DEFAULT_BUFFER_FLUSH_INTERVAL_SEC,
     )
+    incremental_save_interval = _parse_float(
+        data.get("incremental_save_interval_sec"),
+        DEFAULT_INCREMENTAL_SAVE_INTERVAL_SEC,
+    )
 
-    return read_chunk, packet_count, flush_interval
+    return read_chunk, packet_count, flush_interval, incremental_save_interval
 
 
-_PERF_READ_CHUNK, _PERF_PACKET_COUNT, _PERF_FLUSH_INTERVAL = load_performance_config()
+_PERF_READ_CHUNK, _PERF_PACKET_COUNT, _PERF_FLUSH_INTERVAL, _PERF_INCREMENTAL_SAVE_INTERVAL = load_performance_config()
 
 
 def get_bias_current() -> float:
@@ -162,3 +169,7 @@ def get_buffer_flush_packet_count() -> int:
 
 def get_buffer_flush_interval_sec() -> float:
     return _PERF_FLUSH_INTERVAL
+
+
+def get_incremental_save_interval_sec() -> float:
+    return _PERF_INCREMENTAL_SAVE_INTERVAL

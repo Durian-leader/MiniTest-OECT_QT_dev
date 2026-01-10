@@ -1091,6 +1091,13 @@ class TestManager:
                     transient_packet_size = kwargs.get("transient_packet_size")
                     if transient_packet_size:
                         message["transient_packet_size"] = transient_packet_size
+                # 透传增量保存标志
+                if "append" in kwargs:
+                    message["append"] = kwargs["append"]
+                if "streaming" in kwargs:
+                    message["streaming"] = kwargs["streaming"]
+                if "final_chunk" in kwargs:
+                    message["final_chunk"] = kwargs["final_chunk"]
                 self.data_queue.put(message)
             
             # 执行测试

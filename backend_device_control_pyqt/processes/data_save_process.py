@@ -66,6 +66,8 @@ class DataSaveManager:
         # 测试累积数据缓存，用于追加模式
         self.test_data_cache = {}  # {file_path: accumulated_data}
         self.cache_lock = threading.Lock()
+        # 记录流式保存的状态（避免重复写入表头）
+        self.streaming_state = {}  # {file_path: {"header_written": bool}}
         
         # 创建数据目录
         os.makedirs("UserData/AutoSave", exist_ok=True)
@@ -196,11 +198,15 @@ class DataSaveManager:
                 
                 # 保存文件
                 is_append = task.get("append", False)
+                streaming_mode = task.get("streaming", False)
+                final_chunk = task.get("final_chunk", False)
                 success, size, error = self._save_file(
                     file_path,
                     content,
                     mode,
                     is_append,
+                    streaming_mode=streaming_mode,
+                    final_chunk=final_chunk,
                     transimpedance_ohms=transimpedance_ohms,
                     transient_packet_size=transient_packet_size,
                     baseline_current=baseline_current
@@ -261,6 +267,49 @@ class DataSaveManager:
             self.result_queue.put(result)
         except Exception as e:
             logger.error(f"发送保存结果失败: {str(e)}")
+
+    def _stream_save_csv(self, file_path: str, np_data: np.ndarray, header: str, fmt: List[str],
+                         final_chunk: bool = False) -> Tuple[bool, int, Optional[str]]:
+        """
+        Append CSV rows without holding the full dataset in memory.
+        Returns (success, bytes_written, error_message).
+        """
+        if np_data is None or np_data.size == 0:
+            if final_chunk:
+                with self.cache_lock:
+                    self.streaming_state.pop(file_path, None)
+            return True, 0, None
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with self.cache_lock:
+                state = self.streaming_state.get(file_path)
+                header_written = False
+                if state:
+                    header_written = state.get("header_written", False)
+                else:
+                    header_written = os.path.exists(file_path) and os.path.getsize(file_path) > 0
+                self.streaming_state[file_path] = {"header_written": True}
+
+            file_mode = "a" if header_written else "w"
+            before_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            with open(file_path, file_mode, encoding="utf-8") as f:
+                np.savetxt(
+                    f,
+                    np_data,
+                    delimiter=",",
+                    header=header if not header_written else "",
+                    comments='',
+                    fmt=fmt
+                )
+            after_size = os.path.getsize(file_path)
+            if final_chunk:
+                with self.cache_lock:
+                    self.streaming_state.pop(file_path, None)
+            return True, max(after_size - before_size, 0), None
+        except Exception as e:
+            error_msg = f"流式保存文件 {file_path} 失败: {str(e)}"
+            logger.error(error_msg)
+            return False, 0, error_msg
     
     def _save_file(
         self,
@@ -268,6 +317,8 @@ class DataSaveManager:
         content: Any,
         mode: str,
         append: bool = False,
+        streaming_mode: bool = False,
+        final_chunk: bool = False,
         transimpedance_ohms: float = 100.0,
         transient_packet_size: int = 7,
         baseline_current: float = 0.0
@@ -291,6 +342,24 @@ class DataSaveManager:
             # 根据模式处理不同类型的保存
             if mode == "transfer":
                 # 转移特性，CSV格式，保存Vg和Id
+                if streaming_mode and append:
+                    transfer_data_np = bytes_to_numpy(
+                        content,
+                        mode=mode,
+                        transimpedance_ohms=transimpedance_ohms,
+                        baseline_current=baseline_current
+                    )
+                    success, size_written, error_msg = self._stream_save_csv(
+                        file_path,
+                        transfer_data_np,
+                        header="Vg,Id",
+                        fmt=['%.3f', '%g'],
+                        final_chunk=final_chunk
+                    )
+                    if success:
+                        logger.info(f"流式保存转移特性数据: {file_path}, 追加模式: {append}")
+                    return success, size_written, error_msg
+
                 if append and file_path in self.test_data_cache:
                     # 追加模式，累积数据
                     with self.cache_lock:
@@ -361,6 +430,24 @@ class DataSaveManager:
                 else:
                     header = "Time,Id"
                     fmt = ['%.3f', '%g']
+                if streaming_mode and append:
+                    transient_data_np = bytes_to_numpy(
+                        content,
+                        mode=mode,
+                        transimpedance_ohms=transimpedance_ohms,
+                        transient_packet_size=transient_packet_size,
+                        baseline_current=baseline_current
+                    )
+                    success, size_written, error_msg = self._stream_save_csv(
+                        file_path,
+                        transient_data_np,
+                        header=header,
+                        fmt=fmt,
+                        final_chunk=final_chunk
+                    )
+                    if success:
+                        logger.info(f"流式保存瞬态特性数据: {file_path}, 追加模式: {append}")
+                    return success, size_written, error_msg
                 # 瞬态特性，CSV格式，保存Time和Id
                 if append and file_path in self.test_data_cache:
                     # 追加模式，累积数据
