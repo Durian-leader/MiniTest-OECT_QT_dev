@@ -750,7 +750,7 @@ class DeviceControlWidget(QWidget):
         self.last_device_scan = 0  # 强制重新扫描
         self.refresh_devices()
 
-    def start_calibration(self, devices, show_summary: bool = True):
+    def start_calibration(self, devices, show_summary: bool = True, skipped_devices=None):
         if not devices:
             QMessageBox.information(self, tr("main.dialog.info"), "没有可校零的设备")
             return
@@ -759,10 +759,17 @@ class DeviceControlWidget(QWidget):
             return
 
         total = len(devices)
+        skip_text = ""
+        if skipped_devices:
+            skip_names = ", ".join([d.get("device_id") or d.get("device") or "Unknown" for d in skipped_devices])
+            skip_text = f"跳过: {skip_names}\n"
+
         dialog = QProgressDialog("Calibrating devices...", "Cancel", 0, total, self)
         dialog.setWindowModality(Qt.WindowModal)
         dialog.setMinimumDuration(0)
         dialog.setValue(0)
+        if skip_text:
+            dialog.setLabelText(skip_text)
         dialog.show()
 
         worker = CalibrationWorker(self.backend, devices)
@@ -771,7 +778,11 @@ class DeviceControlWidget(QWidget):
 
         def on_progress(current, total_count, device_id, res):
             dialog.setValue(current)
-            dialog.setLabelText(f"{device_id} ({current}/{total_count})")
+            label_line = f"{device_id} ({current}/{total_count})"
+            if skip_text:
+                dialog.setLabelText(skip_text + label_line)
+            else:
+                dialog.setLabelText(label_line)
 
         def on_finished(results):
             dialog.close()
