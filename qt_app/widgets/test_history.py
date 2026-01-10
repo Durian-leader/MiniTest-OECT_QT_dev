@@ -1,6 +1,7 @@
 import os
 import json
 import csv
+import math
 import shutil  # Added for file/directory operations
 import numpy as np
 from datetime import datetime
@@ -1293,8 +1294,10 @@ class TestHistoryWidget(QWidget):
             
             # Update data stats
             if step_type == "output":
-                curve_count = len(self.step_data_dict)
-                point_count = len(next(iter(self.step_data_dict.values()))) if self.step_data_dict else 0
+                curves = self.step_data_dict.get("curves", {}) if self.step_data_dict else {}
+                x_vals = self.step_data_dict.get("x_values", []) if self.step_data_dict else []
+                curve_count = len(curves)
+                point_count = len(x_vals)
                 self.update_data_stats(data_file, point_count, curve_count)
             else:
                 self.update_data_stats(data_file, len(self.step_data))
@@ -1317,19 +1320,29 @@ class TestHistoryWidget(QWidget):
         
         # 读取数据
         for row in reader:
-            if len(row) == len(header):
+            if not row:
+                continue
+            # 如果行列数不足，填充空字符串，避免整行丢弃
+            if len(row) < len(header):
+                row = row + [""] * (len(header) - len(row))
+            try:
+                x_val = float(row[0])
+            except ValueError:
+                continue
+            x_values.append(x_val)
+            
+            for i, label in enumerate(curve_labels):
                 try:
-                    x_val = float(row[0])
-                    x_values.append(x_val)
-                    
-                    for i, label in enumerate(curve_labels):
-                        y_val = float(row[i + 1])
-                        curves_data[label].append(y_val)
+                    y_val = float(row[i + 1])
                 except ValueError:
-                    continue
+                    y_val = math.nan
+                curves_data[label].append(y_val)
         
         # 存储数据
-        self.step_data = [[x, curves_data[curve_labels[0]][i]] for i, x in enumerate(x_values)]  # 保持兼容性
+        if curve_labels:
+            self.step_data = [[x, curves_data[curve_labels[0]][i]] for i, x in enumerate(x_values)]  # 保持兼容性
+        else:
+            self.step_data = []
         self.step_data_dict = {
             'x_values': x_values,
             'curves': curves_data,
