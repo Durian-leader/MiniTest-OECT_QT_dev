@@ -34,7 +34,7 @@ class OverviewRealtimeWidget(QWidget):
         super().__init__(parent)
         self.device_panels: Dict[str, Dict[str, Any]] = {}
         self.columns_count = 2
-        self.plot_height = 320
+        self.plot_height = 440
         self.min_column_width = 320
         self._chrome_height = 140  # Approximate non-plot height for uniform cards
         self.filter_actions: Dict[str, Any] = {}
@@ -59,7 +59,7 @@ class OverviewRealtimeWidget(QWidget):
         self.layout_label = QLabel(tr("overview.columns_label"))
         control_row.addWidget(self.layout_label, 0, Qt.AlignLeft)
         self.columns_spin = QSpinBox()
-        self.columns_spin.setRange(1, 4)
+        self.columns_spin.setRange(1, 10)
         self.columns_spin.setValue(self.columns_count)
         self.columns_spin.setSuffix(tr("overview.columns_suffix"))
         self.columns_spin.valueChanged.connect(self._on_columns_changed)
