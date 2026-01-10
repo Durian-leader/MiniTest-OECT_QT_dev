@@ -80,6 +80,12 @@ class MainWindow(QMainWindow):
         self.device_control.test_started.connect(self.overview.handle_test_started)
         self.device_control.test_completed.connect(self.overview.handle_test_completed)
         self.device_control.devices_updated.connect(self.overview.update_device_list)
+        # Initialize overview device list with already-detected devices on startup
+        if getattr(self.device_control, "cached_devices", None):
+            try:
+                self.overview.update_device_list(self.device_control.cached_devices)
+            except Exception:
+                pass
 
         # Connect tab change signal
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
